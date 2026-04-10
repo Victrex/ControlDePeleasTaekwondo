@@ -1,4 +1,5 @@
 import { Fight } from '../models/Fight.js';
+import { Tournament } from '../models/Tournament.js';
 import { TournamentConfig } from '../models/TournamentConfig.js';
 import { ValidationService } from './validationService.js';
 import { PodiumService } from './podiumService.js';
@@ -16,6 +17,14 @@ export class FightService {
 
     fightData.order_index = maxOrder + 1;
     fightData.fight_number = maxFightNumber + 1;
+
+    // Asignar pista en round-robin si no se especificó
+    if (!fightData.pista) {
+      const tournament = Tournament.findById(fightData.tournament_id);
+      const numPistas = tournament?.num_pistas || 1;
+      // La pista se asigna basándose en el total de peleas existentes
+      fightData.pista = (fights.length % numPistas) + 1;
+    }
 
     const fight = Fight.create(fightData);
 

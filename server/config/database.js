@@ -46,6 +46,7 @@ export function initializeDatabase() {
       category TEXT,
       division TEXT,
       weight_class TEXT,
+      num_pistas INTEGER NOT NULL DEFAULT 1,
       status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'completed', 'cancelled')),
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
@@ -70,6 +71,7 @@ export function initializeDatabase() {
       final_winner TEXT CHECK(final_winner IN ('red', 'blue', NULL)),
       victory_type TEXT CHECK(victory_type IN ('rounds', 'injury', 'abandon', NULL)),
       notes TEXT,
+      pista INTEGER NOT NULL DEFAULT 1,
       bracket_position TEXT,
       bracket_round TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -168,6 +170,12 @@ export function initializeDatabase() {
   // Migraciones para tablas existentes
   try {
     db.exec(`ALTER TABLE tournaments ADD COLUMN status TEXT DEFAULT 'active'`);
+  } catch (e) {}
+  try {
+    db.exec(`ALTER TABLE tournaments ADD COLUMN num_pistas INTEGER NOT NULL DEFAULT 1`);
+  } catch (e) {}
+  try {
+    db.exec(`ALTER TABLE fights ADD COLUMN pista INTEGER NOT NULL DEFAULT 1`);
   } catch (e) {}
   try {
     db.exec(`ALTER TABLE bracket_competitors ADD COLUMN seed INTEGER`);

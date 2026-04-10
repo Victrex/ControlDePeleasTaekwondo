@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { io } from 'socket.io-client';
+import React, { createContext, useContext, useEffect, useState } from "react";
+import { io } from "socket.io-client";
 
 const SocketContext = createContext();
 
@@ -9,16 +9,19 @@ export function SocketProvider({ children }) {
 
   useEffect(() => {
     const newSocket = io({
-      transports: ['websocket', 'polling']
+      transports: ["websocket"],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
     });
 
-    newSocket.on('connect', () => {
-      console.log('✅ Socket conectado');
+    newSocket.on("connect", () => {
+      console.log("✅ Socket conectado");
       setConnected(true);
     });
 
-    newSocket.on('disconnect', () => {
-      console.log('❌ Socket desconectado');
+    newSocket.on("disconnect", () => {
+      console.log("❌ Socket desconectado");
       setConnected(false);
     });
 

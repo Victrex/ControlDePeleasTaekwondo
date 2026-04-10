@@ -18,6 +18,8 @@ export default function PublicDisplay() {
   const [selectedBracket, setSelectedBracket] = useState(null);
   const [bracketMatches, setBracketMatches] = useState([]);
   const [fightWinner, setFightWinner] = useState(null);
+  const [selectedPista, setSelectedPista] = useState(null);
+  const selectedPistaRef = useRef(null);
   const winnerTimeoutRef = useRef(null);
 
   useEffect(() => {
@@ -58,6 +60,14 @@ export default function PublicDisplay() {
   }, [selectedTournament, socket]);
 
   useEffect(() => {
+    selectedPistaRef.current = selectedPista;
+    if (selectedTournament) {
+      loadCurrentFight();
+      loadNextFights();
+    }
+  }, [selectedPista]);
+
+  useEffect(() => {
     if (selectedBracket) {
       loadBracketMatches(selectedBracket.id);
     }
@@ -92,13 +102,16 @@ export default function PublicDisplay() {
     console.log('fight:result-registered recibido:', data);
     const tournamentIdFromData = data?.tournament_id || data?.tournamentId;
     if (selectedTournament && (!tournamentIdFromData || tournamentIdFromData === selectedTournament.id)) {
-      // Determinar el ganador basado en los datos recibidos
-      // Los campos pueden ser: final_winner, round_1_winner, round_2_winner, round_3_winner
-      // con valores 'red' o 'blue'
+      const pista = selectedPistaRef.current;
+      // Si hay filtro de pista y la pelea no es de esa pista, solo recargar listas
+      if (pista && data.pista && data.pista !== pista) {
+        loadNextFights();
+        return;
+      }
+
       let winnerName = '';
       let winnerColor = '';
       
-      // Verificar si hay un ganador final de la pelea
       const finalWinner = data.final_winner;
       
       if (finalWinner === 'red') {
@@ -136,12 +149,10 @@ export default function PublicDisplay() {
   };
 
   const handleFightUpdate = (data) => {
-    // data puede ser la pelea directamente o un objeto con tournament_id
     const tournamentIdFromData = data?.tournament_id || data?.tournamentId;
     if (selectedTournament && (!tournamentIdFromData || tournamentIdFromData === selectedTournament.id)) {
       loadCurrentFight();
       loadNextFights();
-      // Recargar matches del bracket para actualizar ganadores
       if (selectedBracket) {
         loadBracketMatches(selectedBracket.id);
       }
@@ -151,10 +162,14 @@ export default function PublicDisplay() {
   const handleCurrentFightChange = (fight) => {
     // El evento emite la pelea directamente
     if (selectedTournament && fight?.tournament_id === selectedTournament.id) {
-      setCurrentFight(fight);
+      const pista = selectedPistaRef.current;
+      // Solo actualizar directamente si coincide con la pista seleccionada (o no hay filtro)
+      if (!pista || fight.pista === pista) {
+        setCurrentFight(fight);
+      }
+      loadCurrentFight();
       loadNextFights();
     } else if (selectedTournament) {
-      // Recargar si no podemos determinar el torneo
       loadCurrentFight();
       loadNextFights();
     }
@@ -188,8 +203,9 @@ export default function PublicDisplay() {
       return;
     }
     try {
-      console.log('🔄 Cargando pelea actual para torneo:', selectedTournament.id);
-      const data = await api.getCurrentFight(selectedTournament.id);
+      const pista = selectedPistaRef.current;
+      console.log('🔄 Cargando pelea actual para torneo:', selectedTournament.id, 'pista:', pista);
+      const data = await api.getCurrentFight(selectedTournament.id, pista);
       console.log('⚔️ Pelea actual cargada:', data);
       setCurrentFight(data);
     } catch (error) {
@@ -207,8 +223,10 @@ export default function PublicDisplay() {
       console.log('🔄 Cargando peleas para torneo:', selectedTournament.id);
       const fights = await api.getFights(selectedTournament.id);
       console.log('📋 Todas las peleas:', fights);
-      const pending = fights.filter(f => f.status === 'pending').slice(0, 5);
-      const completed = fights.filter(f => f.status === 'completed').reverse();
+      const pista = selectedPistaRef.current;
+      const filteredFights = pista ? fights.filter(f => f.pista === pista) : fights;
+      const pending = filteredFights.filter(f => f.status === 'pending').slice(0, 5);
+      const completed = filteredFights.filter(f => f.status === 'completed').reverse();
       console.log('📋 Peleas pendientes:', pending);
       console.log('✅ Peleas completadas:', completed);
       setNextFights(pending);
@@ -310,6 +328,44 @@ export default function PublicDisplay() {
               {selectedTournament.division && <span>{selectedTournament.division}</span>}
               {selectedTournament.weight_class && <span>{selectedTournament.weight_class}</span>}
             </div>
+            {(selectedTournament.num_pistas || 1) > 1 && (
+              <div className="pista-selector" style={{marginTop: '0.5rem', display: 'flex', gap: '0.5rem', alignItems: 'center', justifyContent: 'center'}}>
+                <span style={{fontWeight: 'bold'}}>Pista:</span>
+                <button
+                  onClick={() => setSelectedPista(null)}
+                  className={`btn-pista ${selectedPista === null ? 'active' : ''}`}
+                  style={{
+                    padding: '0.25rem 0.75rem',
+                    borderRadius: '4px',
+                    border: selectedPista === null ? '2px solid #fff' : '1px solid rgba(255,255,255,0.3)',
+                    background: selectedPista === null ? 'rgba(255,255,255,0.2)' : 'transparent',
+                    color: '#fff',
+                    cursor: 'pointer',
+                    fontWeight: selectedPista === null ? 'bold' : 'normal'
+                  }}
+                >
+                  Todas
+                </button>
+                {Array.from({length: selectedTournament.num_pistas}, (_, i) => (
+                  <button
+                    key={i+1}
+                    onClick={() => setSelectedPista(i+1)}
+                    className={`btn-pista ${selectedPista === i+1 ? 'active' : ''}`}
+                    style={{
+                      padding: '0.25rem 0.75rem',
+                      borderRadius: '4px',
+                      border: selectedPista === i+1 ? '2px solid #fff' : '1px solid rgba(255,255,255,0.3)',
+                      background: selectedPista === i+1 ? 'rgba(255,255,255,0.2)' : 'transparent',
+                      color: '#fff',
+                      cursor: 'pointer',
+                      fontWeight: selectedPista === i+1 ? 'bold' : 'normal'
+                    }}
+                  >
+                    Pista {i+1}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
         <div className={`connection-indicator ${connected ? 'connected' : ''}`}>
@@ -320,7 +376,7 @@ export default function PublicDisplay() {
       <main className="public-main">
         {currentFight ? (
           <div className="current-fight-display">
-            <h3>⚔️ PELEA EN CURSO</h3>
+            <h3>⚔️ PELEA EN CURSO {(selectedTournament?.num_pistas || 1) > 1 ? `- Pista ${currentFight.pista || 1}` : ''}</h3>
             <div className="fighters">
               <div className="fighter red">
                 <br />
@@ -386,6 +442,9 @@ export default function PublicDisplay() {
                   {nextFights.map((fight, idx) => (
                     <li key={fight.id}>
                       <span className="fight-number">#{idx + 1}</span>
+                      {(selectedTournament?.num_pistas || 1) > 1 && (
+                        <span style={{fontSize: '0.75rem', background: 'rgba(255,255,255,0.15)', padding: '0.1rem 0.4rem', borderRadius: '4px', marginRight: '0.25rem'}}>P{fight.pista}</span>
+                      )}
                       <div className="fighter-info red-name">
                         <span className="name">{fight.competitor_red}</span>
                         {fight.academy_red && <span className="academy">({fight.academy_red})</span>}

@@ -91,8 +91,13 @@ class API {
     return this.request(`/fights/tournament/${tournamentId}`);
   }
 
-  async getCurrentFight(tournamentId) {
-    return this.request(`/fights/tournament/${tournamentId}/current`);
+  async getCurrentFight(tournamentId, pista) {
+    const query = pista ? `?pista=${pista}` : '';
+    return this.request(`/fights/tournament/${tournamentId}/current${query}`);
+  }
+
+  async getAllCurrentFights(tournamentId) {
+    return this.request(`/fights/tournament/${tournamentId}/current?all=1`);
   }
 
   async getNextFight(tournamentId) {
@@ -105,6 +110,13 @@ class API {
 
   async createFight(data) {
     return this.request('/fights', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+  
+  async createFightForBracket(data) {
+    return this.request('/fights/bracket', {
       method: 'POST',
       body: JSON.stringify(data)
     });

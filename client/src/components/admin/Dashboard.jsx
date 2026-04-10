@@ -4,6 +4,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useSocket } from '../../contexts/SocketContext';
 import api from '../../utils/api';
 import BracketManager from './BracketManager';
+import { Trash2 } from 'lucide-react';
 
 export default function Dashboard() {
   const { user, logout } = useAuth();
@@ -14,20 +15,23 @@ export default function Dashboard() {
   const [selectedTournament, setSelectedTournament] = useState(null);
   const [fights, setFights] = useState([]);
   const [brackets, setBrackets] = useState([]);
-  const [currentFight, setCurrentFight] = useState(null);
+  const [currentFights, setCurrentFights] = useState([]);
+  const [selectedAdminPista, setSelectedAdminPista] = useState(1);
   const [loading, setLoading] = useState(true);
   const [showNewTournament, setShowNewTournament] = useState(false);
   const [showNewFight, setShowNewFight] = useState(false);
   const [creatingFight, setCreatingFight] = useState(false);
   const [showBracketModal, setShowBracketModal] = useState(false);
   const [selectedBracketId, setSelectedBracketId] = useState(null);
+  const [pistaFilter, setPistaFilter] = useState('');
   
   // Form states
   const [tournamentForm, setTournamentForm] = useState({
     name: '',
     category: '',
     division: '',
-    weight_class: ''
+    weight_class: '',
+    num_pistas: 1
   });
   
   const [fightForm, setFightForm] = useState({
@@ -96,8 +100,9 @@ export default function Dashboard() {
     try {
       const data = await api.getFights(tournamentId);
       setFights(data);
-      const current = data.find(f => f.status === 'current');
-      setCurrentFight(current || null);
+      // Cargar todas las peleas actuales (una por pista)
+      const allCurrent = await api.getAllCurrentFights(tournamentId);
+      setCurrentFights(allCurrent || []);
       // Cargar brackets también
       const bracketsData = await api.getBracketsByTournament(tournamentId);
       setBrackets(bracketsData);
@@ -113,7 +118,7 @@ export default function Dashboard() {
       setTournaments([...tournaments, newTournament]);
       setSelectedTournament(newTournament);
       setShowNewTournament(false);
-      setTournamentForm({ name: '', category: '', division: '', weight_class: '' });
+      setTournamentForm({ name: '', category: '', division: '', weight_class: '', num_pistas: 1 });
     } catch (error) {
       alert('Error creando torneo: ' + error.message);
     }
@@ -131,12 +136,9 @@ export default function Dashboard() {
         peto_color: idx % 2 === 0 ? 'blue' : 'red'
       }));
       // Para la pelea principal, usar los dos primeros
-      const fightRes = await api.createFight({
+      const fightRes = await api.createFightForBracket({
         tournament_id: selectedTournament.id,
-        competitor_red: competitorsWithColor[1]?.name || '',
-        competitor_blue: competitorsWithColor[0]?.name || '',
-        academy_red: competitorsWithColor[1]?.academy || '',
-        academy_blue: competitorsWithColor[0]?.academy || ''
+        competitors: competitorsWithColor
       });
       // Buscar la última llave creada para este torneo
       const brackets = await api.getBracketsByTournament(selectedTournament.id);
@@ -150,6 +152,7 @@ export default function Dashboard() {
           peto_color: i < 2 * Math.floor(competitors.length / 2) ? (i % 2 === 0 ? 'blue' : 'red') : null
         });
       }
+      await api.generateBracketStructure(fightRes.bracket_id);
       loadFights(selectedTournament.id);
       setShowNewFight(false);
       setFightForm({ competitor_red: '', competitor_blue: '', academy_red: '', academy_blue: '' });
@@ -314,6 +317,25 @@ export default function Dashboard() {
                   {selectedTournament.category && <span>Categoría: {selectedTournament.category}</span>}
                   {selectedTournament.division && <span>División: {selectedTournament.division}</span>}
                   {selectedTournament.weight_class && <span>Peso: {selectedTournament.weight_class}</span>}
+                  <span>Pistas: {selectedTournament.num_pistas || 1}
+                    <input
+                      type="number"
+                      min="1"
+                      value={selectedTournament.num_pistas || 1}
+                      onChange={async (e) => {
+                        const val = Math.max(1, parseInt(e.target.value) || 1);
+                        try {
+                          await api.updateTournament(selectedTournament.id, { num_pistas: val });
+                          const updated = { ...selectedTournament, num_pistas: val };
+                          setSelectedTournament(updated);
+                          setTournaments(tournaments.map(t => t.id === updated.id ? updated : t));
+                        } catch (err) {
+                          alert('Error actualizando pistas: ' + err.message);
+                        }
+                      }}
+                      style={{width: '50px', marginLeft: '0.5rem', padding: '0.1rem 0.25rem'}}
+                    />
+                  </span>
                 </div>
                 <button onClick={() => setShowNewFight(true)} className="btn-primary">
                   + Nueva Pelea
@@ -322,9 +344,39 @@ export default function Dashboard() {
                 {/* <BracketManager tournamentId={selectedTournament.id} /> */}
               </div>
 
-              {currentFight && (
+              {(() => {
+                const numPistas = selectedTournament.num_pistas || 1;
+                const currentFight = currentFights.find(f => f.pista === selectedAdminPista) || null;
+                return (
+                <>
+                {/* Selector de pistas */}
+                {numPistas > 1 && (
+                  <div style={{display: 'flex', gap: '0.5rem', marginBottom: '1rem', alignItems: 'center'}}>
+                    <span style={{fontWeight: 'bold'}}>Pista:</span>
+                    {Array.from({length: numPistas}, (_, i) => {
+                      const pistaNum = i + 1;
+                      const hasCurrent = currentFights.some(f => f.pista === pistaNum);
+                      return (
+                        <button
+                          key={pistaNum}
+                          onClick={() => setSelectedAdminPista(pistaNum)}
+                          className={`btn-small ${selectedAdminPista === pistaNum ? 'btn-primary' : 'btn-secondary'}`}
+                          style={{
+                            position: 'relative',
+                            fontWeight: selectedAdminPista === pistaNum ? 'bold' : 'normal'
+                          }}
+                        >
+                          Pista {pistaNum}
+                          {hasCurrent && <span style={{color: '#ff5252', marginLeft: '0.25rem'}}>●</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {currentFight ? (
                 <div className="current-fight-panel">
-                  <h3>🔥 Pelea Actual</h3>
+                  <h3>🔥 Pelea Actual — Pista {currentFight.pista || 1}</h3>
                   <div className="fight-display">
                     <div className="competitor red">
                       <span className="corner">ROJO</span>
@@ -400,14 +452,32 @@ export default function Dashboard() {
                     ✓ Completar Pelea
                   </button>
                 </div>
-              )}
+                ) : (
+                  <div className="current-fight-panel" style={{opacity: 0.6, textAlign: 'center'}}>
+                    <h3>🔥 Pista {selectedAdminPista} — Sin pelea en curso</h3>
+                    <p>Inicia una pelea de la pista {selectedAdminPista} desde la lista de abajo.</p>
+                  </div>
+                )}
+                </>
+                );
+              })()}
 
               <div className="fights-list">
                 <h3>Lista de Peleas</h3>
+                <div style={{marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                  <label>Filtrar por pista:</label>
+                  <select value={pistaFilter} onChange={e => setPistaFilter(e.target.value)} style={{padding: '0.25rem 0.5rem'}}>
+                    <option value="">Todas</option>
+                    {Array.from({length: selectedTournament.num_pistas || 1}, (_, i) => (
+                      <option key={i+1} value={i+1}>Pista {i+1}</option>
+                    ))}
+                  </select>
+                </div>
                 <table>
                   <thead>
                     <tr>
                       <th>Orden</th>
+                      <th>Pista</th>
                       <th>Rojo</th>
                       <th>Azul</th>
                       <th>Estado</th>
@@ -418,6 +488,7 @@ export default function Dashboard() {
                   <tbody>
                     {/* Ordenar: completed primero, luego current, luego pending */}
                     {[...fights]
+                      .filter(f => !pistaFilter || f.pista === parseInt(pistaFilter))
                       .sort((a, b) => {
                         const order = { completed: 0, current: 1, pending: 2 };
                         return (order[a.status] || 3) - (order[b.status] || 3);
@@ -462,6 +533,24 @@ export default function Dashboard() {
                               </div>
                             )}
                           </div>
+                        </td>
+                        <td>
+                          <select 
+                            value={fight.pista || 1} 
+                            onChange={async (e) => {
+                              try {
+                                await api.updateFight(fight.id, { pista: parseInt(e.target.value) });
+                                loadFights(selectedTournament.id);
+                              } catch (err) {
+                                alert('Error actualizando pista: ' + err.message);
+                              }
+                            }}
+                            style={{padding: '0.15rem 0.25rem', fontSize: '0.85rem'}}
+                          >
+                            {Array.from({length: selectedTournament.num_pistas || 1}, (_, i) => (
+                              <option key={i+1} value={i+1}>{i+1}</option>
+                            ))}
+                          </select>
                         </td>
                         <td className="red">{fight.competitor_red}</td>
                         <td className="blue">{fight.competitor_blue}</td>
@@ -557,6 +646,16 @@ export default function Dashboard() {
                   placeholder="Ej: -58kg, -68kg"
                 />
               </div>
+              <div className="form-group">
+                <label>Número de Pistas *</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={tournamentForm.num_pistas}
+                  onChange={e => setTournamentForm({...tournamentForm, num_pistas: Math.max(1, parseInt(e.target.value) || 1)})}
+                  required
+                />
+              </div>
               <div className="modal-buttons">
                 <button type="button" onClick={() => setShowNewTournament(false)} className="btn-secondary">
                   Cancelar
@@ -622,7 +721,7 @@ export default function Dashboard() {
                         justifyContent: 'center'
                       }}
                       title="Eliminar"
-                    >🗑️</button>
+                    ><Trash2 size={16} /></button>
                   </div>
                 ))}
                 <button type="button" disabled={creatingFight} onClick={() => setCompetitors([...competitors, { name: '', academy: '' }])} className="btn-secondary" style={{marginTop: '0.5rem'}}>

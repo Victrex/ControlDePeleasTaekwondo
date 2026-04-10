@@ -57,6 +57,7 @@ router.get('/fights/:id', fightController.getById);
 
 // Privadas (requieren admin)
 router.post('/fights', requireAdmin, fightController.create);
+router.post('/fights/bracket', requireAdmin, fightController.createFightsForBracket);
 router.put('/fights/:id', requireAdmin, fightController.update);
 router.post('/fights/reorder', requireAdmin, fightController.reorder);
 router.post('/fights/:id/result', requireAdmin, fightController.registerResult);

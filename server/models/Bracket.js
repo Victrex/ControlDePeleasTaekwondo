@@ -104,88 +104,108 @@ export class Bracket {
       semi2Stmt.run(bracket_id, competitors[2].id, competitors[3].id, finalId);
       
     } else if (n === 5) {
-      // 5 competidores: 2 cuartos + semifinal con BYE + final
-      // Cuarto 1: comp1 vs comp2
-      // Cuarto 2: comp3 vs comp4
-      // Semi 1: ganador cuarto1 vs comp5 (BYE)
-      // Semi 2: ganador cuarto2 vs TBD
-      // Final: ganador semi1 vs ganador semi2
-      
+      // FINAL
       const finalStmt = db.prepare(`
         INSERT INTO bracket_matches (bracket_id, round, match_number, status)
         VALUES (?, 3, 1, 'pending')
       `);
       const finalId = finalStmt.run(bracket_id).lastInsertRowid;
-      
-      // Semifinal 1: tendrá ganador de cuarto 1 vs competidor 5 (BYE)
-      const semi1Stmt = db.prepare(`
-        INSERT INTO bracket_matches (bracket_id, round, match_number, competitor2_id, next_match_id, next_match_slot, status)
-        VALUES (?, 2, 1, ?, ?, 1, 'pending')
+
+      // SEMIFINAL (ganador cuarto2 vs competidor 5)
+      const semiStmt = db.prepare(`
+        INSERT INTO bracket_matches 
+        (bracket_id, round, match_number, competitor2_id, next_match_id, next_match_slot, status)
+        VALUES (?, 2, 1, ?, ?, 2, 'pending')
       `);
-      const semi1Id = semi1Stmt.run(bracket_id, competitors[4].id, finalId).lastInsertRowid;
-      
-      // Semifinal 2: tendrá ganador de cuarto 2
-      const semi2Stmt = db.prepare(`
-        INSERT INTO bracket_matches (bracket_id, round, match_number, next_match_id, next_match_slot, status)
-        VALUES (?, 2, 2, ?, 2, 'pending')
-      `);
-      const semi2Id = semi2Stmt.run(bracket_id, finalId).lastInsertRowid;
-      
-      // Cuarto 1: comp1 vs comp2
+      const semiId = semiStmt.run(
+        bracket_id,
+        competitors[4].id,
+        finalId
+      ).lastInsertRowid;
+
+      // CUARTO 1 (ganador va directo a FINAL slot 1)
       const q1Stmt = db.prepare(`
-        INSERT INTO bracket_matches (bracket_id, round, match_number, competitor1_id, competitor2_id, next_match_id, next_match_slot, status)
+        INSERT INTO bracket_matches 
+        (bracket_id, round, match_number, competitor1_id, competitor2_id, next_match_id, next_match_slot, status)
         VALUES (?, 1, 1, ?, ?, ?, 1, 'pending')
       `);
-      q1Stmt.run(bracket_id, competitors[0].id, competitors[1].id, semi1Id);
-      
-      // Cuarto 2: comp3 vs comp4
+      q1Stmt.run(
+        bracket_id,
+        competitors[0].id,
+        competitors[1].id,
+        finalId
+      );
+
+      // CUARTO 2 (ganador va a SEMIFINAL slot 1)
       const q2Stmt = db.prepare(`
-        INSERT INTO bracket_matches (bracket_id, round, match_number, competitor1_id, competitor2_id, next_match_id, next_match_slot, status)
+        INSERT INTO bracket_matches 
+        (bracket_id, round, match_number, competitor1_id, competitor2_id, next_match_id, next_match_slot, status)
         VALUES (?, 1, 2, ?, ?, ?, 1, 'pending')
       `);
-      q2Stmt.run(bracket_id, competitors[2].id, competitors[3].id, semi2Id);
-      
+      q2Stmt.run(
+        bracket_id,
+        competitors[2].id,
+        competitors[3].id,
+        semiId
+      );
     } else if (n === 6) {
-      // 6 competidores: 2 cuartos + 2 semifinales (2 con BYE) + final
-      // Cuarto 1: comp1 vs comp2
-      // Cuarto 2: comp3 vs comp4
-      // Semi 1: ganador cuarto1 vs comp5 (BYE)
-      // Semi 2: ganador cuarto2 vs comp6 (BYE)
-      // Final: ganador semi1 vs ganador semi2
-      
+
+      // FINAL
       const finalStmt = db.prepare(`
         INSERT INTO bracket_matches (bracket_id, round, match_number, status)
         VALUES (?, 3, 1, 'pending')
       `);
       const finalId = finalStmt.run(bracket_id).lastInsertRowid;
-      
-      // Semifinal 1: tendrá ganador de cuarto 1 vs competidor 5 (BYE)
-      const semi1Stmt = db.prepare(`
-        INSERT INTO bracket_matches (bracket_id, round, match_number, competitor2_id, next_match_id, next_match_slot, status)
-        VALUES (?, 2, 1, ?, ?, 1, 'pending')
+
+      // SEMIFINAL (ganador cuarto2 vs ganador cuarto3)
+      const semiStmt = db.prepare(`
+        INSERT INTO bracket_matches 
+        (bracket_id, round, match_number, next_match_id, next_match_slot, status)
+        VALUES (?, 2, 1, ?, 2, 'pending')
       `);
-      const semi1Id = semi1Stmt.run(bracket_id, competitors[4].id, finalId).lastInsertRowid;
-      
-      // Semifinal 2: tendrá ganador de cuarto 2 vs competidor 6 (BYE)
-      const semi2Stmt = db.prepare(`
-        INSERT INTO bracket_matches (bracket_id, round, match_number, competitor2_id, next_match_id, next_match_slot, status)
-        VALUES (?, 2, 2, ?, ?, 2, 'pending')
-      `);
-      const semi2Id = semi2Stmt.run(bracket_id, competitors[5].id, finalId).lastInsertRowid;
-      
-      // Cuarto 1: comp1 vs comp2
+      const semiId = semiStmt.run(
+        bracket_id,
+        finalId
+      ).lastInsertRowid;
+
+      // CUARTO 1 (ganador va directo a FINAL slot 1)
       const q1Stmt = db.prepare(`
-        INSERT INTO bracket_matches (bracket_id, round, match_number, competitor1_id, competitor2_id, next_match_id, next_match_slot, status)
+        INSERT INTO bracket_matches 
+        (bracket_id, round, match_number, competitor1_id, competitor2_id, next_match_id, next_match_slot, status)
         VALUES (?, 1, 1, ?, ?, ?, 1, 'pending')
       `);
-      q1Stmt.run(bracket_id, competitors[0].id, competitors[1].id, semi1Id);
-      
-      // Cuarto 2: comp3 vs comp4
+      q1Stmt.run(
+        bracket_id,
+        competitors[0].id,
+        competitors[1].id,
+        finalId
+      );
+
+      // CUARTO 2 (ganador va a SEMIFINAL slot 1)
       const q2Stmt = db.prepare(`
-        INSERT INTO bracket_matches (bracket_id, round, match_number, competitor1_id, competitor2_id, next_match_id, next_match_slot, status)
+        INSERT INTO bracket_matches 
+        (bracket_id, round, match_number, competitor1_id, competitor2_id, next_match_id, next_match_slot, status)
         VALUES (?, 1, 2, ?, ?, ?, 1, 'pending')
       `);
-      q2Stmt.run(bracket_id, competitors[2].id, competitors[3].id, semi2Id);
+      q2Stmt.run(
+        bracket_id,
+        competitors[2].id,
+        competitors[3].id,
+        semiId
+      );
+
+      // CUARTO 3 (ganador va a SEMIFINAL slot 2)
+      const q3Stmt = db.prepare(`
+        INSERT INTO bracket_matches 
+        (bracket_id, round, match_number, competitor1_id, competitor2_id, next_match_id, next_match_slot, status)
+        VALUES (?, 1, 3, ?, ?, ?, 2, 'pending')
+      `);
+      q3Stmt.run(
+        bracket_id,
+        competitors[4].id,
+        competitors[5].id,
+        semiId
+      );
     }
     
     return this.getMatches(bracket_id);

@@ -6,8 +6,8 @@ export class Fight {
     const stmt = db.prepare(`
       INSERT INTO fights (
         tournament_id, bracket_id, fight_number, competitor_red, competitor_blue,
-        academy_red, academy_blue, order_index, bracket_position, bracket_round
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        academy_red, academy_blue, order_index, bracket_position, bracket_round, pista
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const result = stmt.run(
@@ -20,7 +20,8 @@ export class Fight {
       fightData.academy_blue || null,
       fightData.order_index,
       fightData.bracket_position || null,
-      fightData.bracket_round || null
+      fightData.bracket_round || null,
+      fightData.pista || 1
     );
 
     return this.findById(result.lastInsertRowid);
@@ -44,6 +45,18 @@ export class Fight {
     return stmt.get(tournamentId);
   }
 
+  // Obtener todas las peleas actuales (una por pista)
+  static getAllCurrentFights(tournamentId) {
+    const stmt = db.prepare("SELECT * FROM fights WHERE tournament_id = ? AND status = 'current' ORDER BY pista ASC");
+    return stmt.all(tournamentId);
+  }
+
+  // Obtener pelea actual por pista
+  static getCurrentFightByPista(tournamentId, pista) {
+    const stmt = db.prepare("SELECT * FROM fights WHERE tournament_id = ? AND status = 'current' AND pista = ?");
+    return stmt.get(tournamentId, pista);
+  }
+
   // Obtener próxima pelea pendiente
   static getNextPendingFight(tournamentId) {
     const stmt = db.prepare(`
@@ -60,7 +73,7 @@ export class Fight {
     const allowedFields = [
       'competitor_red', 'competitor_blue', 'academy_red', 'academy_blue',
       'status', 'order_index', 'round_1_winner', 'round_2_winner', 'round_3_winner',
-      'final_winner', 'victory_type', 'notes', 'bracket_position', 'bracket_round'
+      'final_winner', 'victory_type', 'notes', 'bracket_position', 'bracket_round', 'pista'
     ];
 
     const fields = Object.keys(updates).filter(key => allowedFields.includes(key));
@@ -95,11 +108,21 @@ export class Fight {
 
   // Marcar pelea como actual
   static setAsCurrent(id, tournamentId) {
-    const clearCurrent = db.prepare("UPDATE fights SET status = 'pending' WHERE tournament_id = ? AND status = 'current'");
+    // Obtener la pista de la pelea que se va a marcar como actual
+    const fight = this.findById(id);
+    const pista = fight ? fight.pista : null;
+    
+    const clearCurrent = pista
+      ? db.prepare("UPDATE fights SET status = 'pending' WHERE tournament_id = ? AND status = 'current' AND pista = ?")
+      : db.prepare("UPDATE fights SET status = 'pending' WHERE tournament_id = ? AND status = 'current'");
     const setCurrent = db.prepare("UPDATE fights SET status = 'current' WHERE id = ?");
 
     const transaction = db.transaction(() => {
-      clearCurrent.run(tournamentId);
+      if (pista) {
+        clearCurrent.run(tournamentId, pista);
+      } else {
+        clearCurrent.run(tournamentId);
+      }
       setCurrent.run(id);
     });
 
@@ -109,12 +132,19 @@ export class Fight {
 
   // Completar pelea y avanzar a la siguiente
   static complete(id, tournamentId) {
+    // Obtener pista de la pelea antes de completarla
+    const fightBefore = this.findById(id);
+    const pista = fightBefore ? fightBefore.pista : null;
+    
     const updateFight = db.prepare("UPDATE fights SET status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = ?");
-    const clearCurrent = db.prepare("UPDATE fights SET status = 'pending' WHERE tournament_id = ? AND status = 'current'");
     
     const transaction = db.transaction(() => {
       updateFight.run(id);
-      clearCurrent.run(tournamentId);
+      // Solo limpiar current de la misma pista
+      if (pista) {
+        const clearCurrent = db.prepare("UPDATE fights SET status = 'pending' WHERE tournament_id = ? AND status = 'current' AND pista = ? AND id != ?");
+        clearCurrent.run(tournamentId, pista, id);
+      }
     });
 
     transaction();

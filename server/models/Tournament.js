@@ -4,15 +4,16 @@ export class Tournament {
   // Crear nuevo torneo/llave
   static create(tournamentData) {
     const stmt = db.prepare(`
-      INSERT INTO tournaments (name, category, division, weight_class)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO tournaments (name, category, division, weight_class, num_pistas)
+      VALUES (?, ?, ?, ?, ?)
     `);
 
     const result = stmt.run(
       tournamentData.name,
       tournamentData.category || null,
       tournamentData.division || null,
-      tournamentData.weight_class || null
+      tournamentData.weight_class || null,
+      tournamentData.num_pistas || 1
     );
 
     return this.findById(result.lastInsertRowid);
@@ -38,7 +39,7 @@ export class Tournament {
 
   // Actualizar torneo
   static update(id, updates) {
-    const allowedFields = ['name', 'category', 'division', 'weight_class', 'status'];
+    const allowedFields = ['name', 'category', 'division', 'weight_class', 'status', 'num_pistas'];
     const fields = Object.keys(updates).filter(key => allowedFields.includes(key));
     
     if (fields.length === 0) return false;
