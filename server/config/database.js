@@ -167,6 +167,60 @@ export function initializeDatabase() {
     )
   `);
 
+  // Tabla de configuración de scoring por torneo
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS scoring_config (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tournament_id INTEGER NOT NULL UNIQUE,
+      round_time_seconds INTEGER NOT NULL DEFAULT 120,
+      rest_time_seconds INTEGER NOT NULL DEFAULT 60,
+      num_rounds INTEGER NOT NULL DEFAULT 3,
+      gap_point INTEGER NOT NULL DEFAULT 20,
+      max_gam_jeom INTEGER NOT NULL DEFAULT 10,
+      judge_window_ms INTEGER NOT NULL DEFAULT 1500,
+      num_judges INTEGER NOT NULL DEFAULT 3,
+      min_judges_agree INTEGER NOT NULL DEFAULT 0,
+      points_punch_body INTEGER NOT NULL DEFAULT 1,
+      points_kick_body INTEGER NOT NULL DEFAULT 2,
+      points_kick_head INTEGER NOT NULL DEFAULT 3,
+      points_spinning_kick_body INTEGER NOT NULL DEFAULT 4,
+      points_spinning_kick_head INTEGER NOT NULL DEFAULT 5,
+      gam_jeom_points INTEGER NOT NULL DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Tabla de puntos otorgados oficiales
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS fight_scores (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      fight_id INTEGER NOT NULL,
+      round INTEGER NOT NULL,
+      team TEXT NOT NULL CHECK(team IN ('red', 'blue')),
+      action TEXT NOT NULL CHECK(action IN ('punch_body', 'kick_body', 'kick_head', 'spinning_kick_body', 'spinning_kick_head', 'gam_jeom')),
+      points INTEGER NOT NULL,
+      timestamp INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (fight_id) REFERENCES fights(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Tabla de inputs crudos de jueces (buffer de consenso)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS judge_inputs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      fight_id INTEGER NOT NULL,
+      judge_id INTEGER NOT NULL,
+      round INTEGER NOT NULL,
+      team TEXT NOT NULL CHECK(team IN ('red', 'blue')),
+      action TEXT NOT NULL CHECK(action IN ('punch_body', 'kick_body', 'kick_head', 'spinning_kick_body', 'spinning_kick_head')),
+      timestamp INTEGER NOT NULL,
+      processed INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (fight_id) REFERENCES fights(id) ON DELETE CASCADE
+    )
+  `);
+
   // Migraciones para tablas existentes
   try {
     db.exec(`ALTER TABLE tournaments ADD COLUMN status TEXT DEFAULT 'active'`);
@@ -185,6 +239,32 @@ export function initializeDatabase() {
   } catch (e) {}
   try {
     db.exec(`ALTER TABLE bracket_matches ADD COLUMN next_match_slot INTEGER DEFAULT 1`);
+  } catch (e) {}
+
+  // Migraciones de scoring en fights
+  try {
+    db.exec(`ALTER TABLE fights ADD COLUMN score_red INTEGER NOT NULL DEFAULT 0`);
+  } catch (e) {}
+  try {
+    db.exec(`ALTER TABLE fights ADD COLUMN score_blue INTEGER NOT NULL DEFAULT 0`);
+  } catch (e) {}
+  try {
+    db.exec(`ALTER TABLE fights ADD COLUMN gam_jeom_red INTEGER NOT NULL DEFAULT 0`);
+  } catch (e) {}
+  try {
+    db.exec(`ALTER TABLE fights ADD COLUMN gam_jeom_blue INTEGER NOT NULL DEFAULT 0`);
+  } catch (e) {}
+  try {
+    db.exec(`ALTER TABLE fights ADD COLUMN current_round INTEGER NOT NULL DEFAULT 1`);
+  } catch (e) {}
+  try {
+    db.exec(`ALTER TABLE fights ADD COLUMN timer_running INTEGER NOT NULL DEFAULT 0`);
+  } catch (e) {}
+  try {
+    db.exec(`ALTER TABLE fights ADD COLUMN timer_remaining_ms INTEGER`);
+  } catch (e) {}
+  try {
+    db.exec(`ALTER TABLE scoring_config ADD COLUMN min_judges_agree INTEGER NOT NULL DEFAULT 0`);
   } catch (e) {}
 
   // Insertar configuración por defecto si no existe

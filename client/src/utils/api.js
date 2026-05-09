@@ -220,6 +220,120 @@ class API {
       body: JSON.stringify(data)
     });
   }
+
+  // ============================================
+  // SCORING / PUNTUACIÓN
+  // ============================================
+
+  async getScoringState(fightId) {
+    return this.request(`/scoring/${fightId}/state`);
+  }
+
+  async getScoringBreakdown(fightId) {
+    return this.request(`/scoring/${fightId}/breakdown`);
+  }
+
+  async startTimer(fightId) {
+    return this.request(`/scoring/${fightId}/start-timer`, { method: 'POST' });
+  }
+
+  async stopTimer(fightId) {
+    return this.request(`/scoring/${fightId}/stop-timer`, { method: 'POST' });
+  }
+
+  async resetTimer(fightId, seconds) {
+    return this.request(`/scoring/${fightId}/reset-timer`, {
+      method: 'POST',
+      body: JSON.stringify({ seconds })
+    });
+  }
+
+  async startKyeShie(fightId) {
+    return this.request(`/scoring/${fightId}/kye-shie`, { method: 'POST' });
+  }
+
+  async cancelKyeShie(fightId) {
+    return this.request(`/scoring/${fightId}/kye-shie/cancel`, { method: 'POST' });
+  }
+
+  async addGamJeom(fightId, team) {
+    return this.request(`/scoring/${fightId}/gam-jeom`, {
+      method: 'POST',
+      body: JSON.stringify({ team })
+    });
+  }
+
+  async removeGamJeom(fightId, team) {
+    return this.request(`/scoring/${fightId}/remove-gam-jeom`, {
+      method: 'POST',
+      body: JSON.stringify({ team })
+    });
+  }
+
+  async addAdminScore(fightId, team, action) {
+    return this.request(`/scoring/${fightId}/add-score`, {
+      method: 'POST',
+      body: JSON.stringify({ team, action })
+    });
+  }
+
+  async setScore(fightId, team, score) {
+    return this.request(`/scoring/${fightId}/set-score`, {
+      method: 'POST',
+      body: JSON.stringify({ team, score })
+    });
+  }
+
+  async setRound(fightId, round) {
+    return this.request(`/scoring/${fightId}/set-round`, {
+      method: 'POST',
+      body: JSON.stringify({ round })
+    });
+  }
+
+  async setTimerValue(fightId, minutes, seconds) {
+    return this.request(`/scoring/${fightId}/set-timer`, {
+      method: 'POST',
+      body: JSON.stringify({ minutes, seconds })
+    });
+  }
+
+  async editScore(fightId, scoreId, points) {
+    return this.request(`/scoring/${fightId}/edit-score`, {
+      method: 'PUT',
+      body: JSON.stringify({ scoreId, points })
+    });
+  }
+
+  async deleteScore(fightId, scoreId) {
+    return this.request(`/scoring/${fightId}/score/${scoreId}`, { method: 'DELETE' });
+  }
+
+  async clearCurrentRoundScore(fightId) {
+    return this.request(`/scoring/${fightId}/clear-current-score`, { method: 'POST' });
+  }
+
+  async endRound(fightId) {
+    return this.request(`/scoring/${fightId}/end-round`, { method: 'POST' });
+  }
+
+  async setRoundWinner(fightId, round, winner) {
+    return this.request(`/scoring/${fightId}/round-winner`, {
+      method: 'POST',
+      body: JSON.stringify({ round, winner })
+    });
+  }
+
+  async getScoringConfig(tournamentId) {
+    return this.request(`/scoring/config/${tournamentId}`);
+  }
+
+  async updateScoringConfig(tournamentId, config) {
+    return this.request(`/scoring/config/${tournamentId}`, {
+      method: 'PUT',
+      body: JSON.stringify(config)
+    });
+  }
 }
 
 export default new API();

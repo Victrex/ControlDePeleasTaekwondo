@@ -1405,6 +1405,176 @@ input:focus, select:focus, textarea:focus {
   color: #bfdbfe;
 }
 
+/* ===== Upcoming fights cards ===== */
+.upcoming-fights-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.upcoming-fight-card {
+  display: flex;
+  align-items: stretch;
+  border-radius: 12px;
+  background: rgba(30, 41, 59, 0.75);
+  border: 1px solid rgba(55, 65, 81, 0.55);
+  overflow: hidden;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.upcoming-fight-card:hover {
+  border-color: rgba(100, 116, 139, 0.85);
+  background: rgba(30, 41, 59, 0.95);
+}
+
+.upcoming-fight-next {
+  border-color: rgba(234, 179, 8, 0.45);
+  background: rgba(30, 41, 59, 0.95);
+  box-shadow: 0 0 18px rgba(234, 179, 8, 0.08);
+}
+
+.ufc-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  background: rgba(15, 23, 42, 0.6);
+  padding: 0.5rem 0.4rem;
+  border-right: 1px solid rgba(55, 65, 81, 0.5);
+  flex-shrink: 0;
+}
+
+.ufc-next-label {
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  color: #eab308;
+  text-transform: uppercase;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  transform: rotate(180deg);
+  line-height: 1;
+}
+
+.ufc-num {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #6b7280;
+}
+
+.ufc-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.9rem;
+  min-width: 0;
+}
+
+.ufc-red {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.ufc-blue {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: flex-start;
+  min-width: 0;
+}
+
+.ufc-corner-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.red-dot {
+  background: #ef4444;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.65);
+}
+
+.blue-dot {
+  background: #3b82f6;
+  box-shadow: 0 0 6px rgba(59, 130, 246, 0.65);
+}
+
+.ufc-fighter {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ufc-fighter-right {
+  text-align: right;
+  align-items: flex-end;
+}
+
+.ufc-name {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ufc-red .ufc-name { color: #fca5a5; }
+.ufc-blue .ufc-name { color: #93c5fd; }
+
+.ufc-academy {
+  font-size: 0.7rem;
+  color: #6b7280;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ufc-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  flex-shrink: 0;
+}
+
+.ufc-vs {
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #9ca3af;
+  letter-spacing: 0.06em;
+}
+
+.ufc-pista-badge {
+  font-size: 0.62rem;
+  background: rgba(99, 102, 241, 0.18);
+  color: #a5b4fc;
+  border: 1px solid rgba(99, 102, 241, 0.32);
+  border-radius: 4px;
+  padding: 0.08rem 0.32rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.ufc-round-badge {
+  font-size: 0.6rem;
+  background: rgba(234, 179, 8, 0.13);
+  color: #fcd34d;
+  border: 1px solid rgba(234, 179, 8, 0.28);
+  border-radius: 4px;
+  padding: 0.08rem 0.32rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
 .tournament-selector {
   margin-top: 1.5rem;
   padding-top: 1rem;
@@ -1714,7 +1884,6 @@ input:focus, select:focus, textarea:focus {
 .winner-content {
   text-align: center;
   color: white;
-  animation: winnerPulse 1.5s ease-in-out infinite;
 }
 
 @keyframes winnerPulse {

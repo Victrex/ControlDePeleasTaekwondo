@@ -1,6 +1,17 @@
 import { Server } from 'socket.io';
 
 let io;
+let scoringServiceRef = null;
+
+// Lazy load scoring service to avoid circular dependency
+function getScoringService() {
+  if (!scoringServiceRef) {
+    import('../services/scoringService.js').then(m => {
+      scoringServiceRef = m.scoringService;
+    });
+  }
+  return scoringServiceRef;
+}
 
 export function initializeSocket(server) {
   io = new Server(server, {
@@ -8,6 +19,11 @@ export function initializeSocket(server) {
       origin: '*',
       methods: ['GET', 'POST']
     }
+  });
+
+  // Pre-load scoring service
+  import('../services/scoringService.js').then(m => {
+    scoringServiceRef = m.scoringService;
   });
 
   io.on('connection', (socket) => {
@@ -25,6 +41,32 @@ export function initializeSocket(server) {
     socket.on('join-public', () => {
       socket.join('public-room');
       console.log(`👥 Público unido: ${socket.id}`);
+    });
+
+    socket.on('join-judge', (data) => {
+      socket.join(`judge-room`);
+      console.log(`⚖️ Juez unido: ${socket.id} (judge ${data?.judgeId})`);
+    });
+
+    socket.on('join-scoreboard', (data) => {
+      socket.join(`scoreboard-room`);
+      console.log(`📺 Scoreboard unido: ${socket.id} (fight ${data?.fightId})`);
+    });
+
+    // Judge input via WebSocket (real-time scoring)
+    socket.on('judge:input', (data) => {
+      const svc = getScoringService();
+      if (!svc) {
+        console.error('Scoring service not loaded yet');
+        return;
+      }
+      try {
+        const { fightId, judgeId, team, action } = data;
+        if (!fightId || !judgeId || !team || !action) return;
+        svc.processJudgeInput(fightId, judgeId, team, action, Date.now());
+      } catch (error) {
+        console.error('Error processing judge input:', error.message);
+      }
     });
   });
 

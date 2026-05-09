@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useSocket } from '../../contexts/SocketContext';
 import api from '../../utils/api';
@@ -24,6 +24,8 @@ export default function Dashboard() {
   const [showBracketModal, setShowBracketModal] = useState(false);
   const [selectedBracketId, setSelectedBracketId] = useState(null);
   const [pistaFilter, setPistaFilter] = useState('');
+  const [showScoringConfig, setShowScoringConfig] = useState(false);
+  const [scoringConfig, setScoringConfig] = useState(null);
   
   // Form states
   const [tournamentForm, setTournamentForm] = useState({
@@ -340,6 +342,19 @@ export default function Dashboard() {
                 <button onClick={() => setShowNewFight(true)} className="btn-primary">
                   + Nueva Pelea
                 </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      const cfg = await api.getScoringConfig(selectedTournament.id);
+                      setScoringConfig(cfg);
+                      setShowScoringConfig(true);
+                    } catch (e) { alert(e.message); }
+                  }}
+                  className="btn-primary"
+                  style={{ marginLeft: '0.5rem', background: '#805ad5' }}
+                >
+                  ⚙ Config Scoring
+                </button>
                 {/* Bracket Manager Integration */}
                 {/* <BracketManager tournamentId={selectedTournament.id} /> */}
               </div>
@@ -572,6 +587,15 @@ export default function Dashboard() {
                               Iniciar
                             </button>
                           )}
+                          {fight.status === 'current' && (
+                            <Link 
+                              to={`/admin/scoring/${fight.id}`}
+                              className="btn-small"
+                              style={{ marginLeft: '0.5rem', textDecoration: 'none', display: 'inline-block', background: '#805ad5', color: 'white', padding: '0.2rem 0.6rem', borderRadius: '4px', fontSize: '0.8rem' }}
+                            >
+                              🥋 Scoring
+                            </Link>
+                          )}
                           <button 
                             onClick={() => {
                               // Usar bracket_id si existe, sino buscar por índice
@@ -759,6 +783,109 @@ export default function Dashboard() {
             <div className="modal-buttons">
               <button className="btn-secondary" onClick={() => { setShowBracketModal(false); setSelectedBracketId(null); }}>Cerrar</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Scoring Config */}
+      {showScoringConfig && scoringConfig && (
+        <div className="modal-overlay">
+          <div className="modal" style={{maxWidth: '600px'}}>
+            <h3>⚙ Configuración de Puntuación</h3>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              try {
+                await api.updateScoringConfig(selectedTournament.id, scoringConfig);
+                setShowScoringConfig(false);
+                alert('Configuración guardada');
+              } catch (err) { alert(err.message); }
+            }}>
+              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.8rem'}}>
+                <div className="form-group">
+                  <label>Rounds</label>
+                  <input type="number" min="1" max="5" value={scoringConfig.num_rounds}
+                    onChange={e => setScoringConfig({...scoringConfig, num_rounds: parseInt(e.target.value) || 3})} />
+                </div>
+                <div className="form-group">
+                  <label>Duración round (seg)</label>
+                  <input type="number" min="30" max="600" value={scoringConfig.round_time_seconds}
+                    onChange={e => setScoringConfig({...scoringConfig, round_time_seconds: parseInt(e.target.value) || 120})} />
+                </div>
+                <div className="form-group">
+                  <label>Descanso (seg)</label>
+                  <input type="number" min="10" max="300" value={scoringConfig.rest_time_seconds}
+                    onChange={e => setScoringConfig({...scoringConfig, rest_time_seconds: parseInt(e.target.value) || 60})} />
+                </div>
+                <div className="form-group">
+                  <label>Gap Point (dif. pts)</label>
+                  <input type="number" min="5" max="50" value={scoringConfig.gap_point}
+                    onChange={e => setScoringConfig({...scoringConfig, gap_point: parseInt(e.target.value) || 20})} />
+                </div>
+                <div className="form-group">
+                  <label>Máx Gam-jeom</label>
+                  <input type="number" min="3" max="20" value={scoringConfig.max_gam_jeom}
+                    onChange={e => setScoringConfig({...scoringConfig, max_gam_jeom: parseInt(e.target.value) || 10})} />
+                </div>
+                <div className="form-group">
+                  <label>Núm. Jueces</label>
+                  <input type="number" min="1" max="7" value={scoringConfig.num_judges}
+                    onChange={e => setScoringConfig({...scoringConfig, num_judges: parseInt(e.target.value) || 3, min_judges_agree: 0})} />
+                </div>
+                {scoringConfig.num_judges === 2 && (
+                  <div className="form-group">
+                    <label>Jueces para puntuar</label>
+                    <select value={scoringConfig.min_judges_agree || 0}
+                      onChange={e => setScoringConfig({...scoringConfig, min_judges_agree: parseInt(e.target.value)})}>
+                      <option value={0}>Mayoría automática (1)</option>
+                      <option value={1}>Basta 1 juez</option>
+                      <option value={2}>Ambos jueces</option>
+                    </select>
+                  </div>
+                )}
+                <div className="form-group">
+                  <label>Ventana jueces (ms)</label>
+                  <input type="number" min="500" max="5000" step="100" value={scoringConfig.judge_window_ms}
+                    onChange={e => setScoringConfig({...scoringConfig, judge_window_ms: parseInt(e.target.value) || 1500})} />
+                </div>
+              </div>
+              <h4 style={{marginTop:'1rem', marginBottom:'0.5rem', color:'#a0aec0'}}>Puntos por Técnica</h4>
+              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.8rem'}}>
+                <div className="form-group">
+                  <label>Puño peto</label>
+                  <input type="number" min="0" max="10" value={scoringConfig.points_punch_body}
+                    onChange={e => setScoringConfig({...scoringConfig, points_punch_body: parseInt(e.target.value) || 0})} />
+                </div>
+                <div className="form-group">
+                  <label>Patada peto</label>
+                  <input type="number" min="0" max="10" value={scoringConfig.points_kick_body}
+                    onChange={e => setScoringConfig({...scoringConfig, points_kick_body: parseInt(e.target.value) || 0})} />
+                </div>
+                <div className="form-group">
+                  <label>Patada cabeza</label>
+                  <input type="number" min="0" max="10" value={scoringConfig.points_kick_head}
+                    onChange={e => setScoringConfig({...scoringConfig, points_kick_head: parseInt(e.target.value) || 0})} />
+                </div>
+                <div className="form-group">
+                  <label>Giro peto</label>
+                  <input type="number" min="0" max="10" value={scoringConfig.points_spinning_kick_body}
+                    onChange={e => setScoringConfig({...scoringConfig, points_spinning_kick_body: parseInt(e.target.value) || 0})} />
+                </div>
+                <div className="form-group">
+                  <label>Giro cabeza</label>
+                  <input type="number" min="0" max="10" value={scoringConfig.points_spinning_kick_head}
+                    onChange={e => setScoringConfig({...scoringConfig, points_spinning_kick_head: parseInt(e.target.value) || 0})} />
+                </div>
+                <div className="form-group">
+                  <label>Pts por Gam-jeom</label>
+                  <input type="number" min="0" max="5" value={scoringConfig.gam_jeom_points}
+                    onChange={e => setScoringConfig({...scoringConfig, gam_jeom_points: parseInt(e.target.value) || 0})} />
+                </div>
+              </div>
+              <div className="modal-buttons" style={{marginTop:'1rem'}}>
+                <button type="button" onClick={() => setShowScoringConfig(false)} className="btn-secondary">Cancelar</button>
+                <button type="submit" className="btn-primary">Guardar</button>
+              </div>
+            </form>
           </div>
         </div>
       )}

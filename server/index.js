@@ -96,6 +96,9 @@ async function startServer() {
       console.log(`🚀 Servidor corriendo en: http://localhost:${PORT}`);
       console.log(`📊 Panel Admin: http://localhost:${PORT}/admin`);
       console.log(`👥 Vista Pública: http://localhost:${PORT}/public`);
+      console.log(`📺 Scoreboard: http://localhost:${PORT}/scoreboard/:fightId`);
+      console.log(`⚖️  Panel Juez: http://localhost:${PORT}/judge/:fightId?judgeId=N`);
+      console.log(`🥋 Control Scoring: http://localhost:${PORT}/admin/scoring/:fightId`);
       console.log('');
       console.log('🔐 Credenciales por defecto:');
       console.log('   Usuario: admin');

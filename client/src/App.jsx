@@ -5,7 +5,10 @@ import { useAuth } from './hooks/useAuth';
 import Login from './components/shared/Login';
 import Dashboard from './components/admin/Dashboard';
 import Awards from './components/admin/Awards';
+import ScoringControl from './components/admin/ScoringControl';
 import PublicDisplay from './components/public/PublicDisplay';
+import Scoreboard from './components/scoreboard/Scoreboard';
+import JudgePanel from './components/judge/JudgePanel';
 import './App.css';
 
 function ProtectedRoute({ children }) {
@@ -34,11 +37,21 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/public/:tournamentId?" element={<PublicDisplay />} />
+          <Route path="/scoreboard/:fightId" element={<Scoreboard />} />
+          <Route path="/judge/:fightId" element={<JudgePanel />} />
           <Route 
             path="/admin" 
             element={
               <ProtectedRoute>
                 <Dashboard />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/scoring/:fightId" 
+            element={
+              <ProtectedRoute>
+                <ScoringControl />
               </ProtectedRoute>
             } 
           />

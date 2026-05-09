@@ -4,6 +4,7 @@ import { fightController } from '../controllers/fightController.js';
 import { tournamentController } from '../controllers/tournamentController.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { bracketController } from '../controllers/bracketController.js';
+import { scoringController } from '../controllers/scoringController.js';
 
 const router = express.Router();
 
@@ -78,5 +79,44 @@ router.get('/brackets/:bracket_id/competitors', bracketController.getCompetitors
 router.post('/brackets/:bracket_id/generate', requireAdmin, bracketController.generateStructure);
 router.get('/brackets/:bracket_id/matches', bracketController.getMatches);
 router.post('/brackets/match/:match_id/winner', requireAdmin, bracketController.setMatchWinner);
+
+// ============================================
+// RUTAS DE SCORING / PUNTUACIÓN
+// ============================================
+// Estado completo de scoring de una pelea (público)
+router.get('/scoring/:fightId/state', scoringController.getFightScoringState);
+router.get('/scoring/:fightId/breakdown', scoringController.getBreakdown);
+
+// Config de scoring por torneo
+router.get('/scoring/config/:tournamentId', scoringController.getConfig);
+router.put('/scoring/config/:tournamentId', requireAdmin, scoringController.updateConfig);
+
+// Timer controls (admin)
+router.post('/scoring/:fightId/start-timer', requireAdmin, scoringController.startTimer);
+router.post('/scoring/:fightId/stop-timer', requireAdmin, scoringController.stopTimer);
+router.post('/scoring/:fightId/reset-timer', requireAdmin, scoringController.resetTimer);
+router.post('/scoring/:fightId/kye-shie', requireAdmin, scoringController.startKyeShie);
+router.post('/scoring/:fightId/kye-shie/cancel', requireAdmin, scoringController.cancelKyeShie);
+
+// Gam-jeom (admin)
+router.post('/scoring/:fightId/gam-jeom', requireAdmin, scoringController.addGamJeom);
+router.post('/scoring/:fightId/remove-gam-jeom', requireAdmin, scoringController.removeGamJeom);
+
+// Admin direct score (bypasses judge consensus)
+router.post('/scoring/:fightId/add-score', requireAdmin, scoringController.adminAddScore);
+
+// Set exact score / timer / round (admin)
+router.post('/scoring/:fightId/set-score', requireAdmin, scoringController.setScore);
+router.post('/scoring/:fightId/set-round', requireAdmin, scoringController.setRound);
+router.post('/scoring/:fightId/set-timer', requireAdmin, scoringController.setTimer);
+
+// Score editing (admin, timer must be stopped)
+router.put('/scoring/:fightId/edit-score', requireAdmin, scoringController.editScore);
+router.delete('/scoring/:fightId/score/:scoreId', requireAdmin, scoringController.deleteScore);
+router.post('/scoring/:fightId/clear-current-score', requireAdmin, scoringController.clearCurrentRoundScore);
+
+// Round management (admin)
+router.post('/scoring/:fightId/end-round', requireAdmin, scoringController.endRound);
+router.post('/scoring/:fightId/round-winner', requireAdmin, scoringController.setRoundWinner);
 
 export default router;

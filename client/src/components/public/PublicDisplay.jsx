@@ -225,7 +225,7 @@ export default function PublicDisplay() {
       console.log('📋 Todas las peleas:', fights);
       const pista = selectedPistaRef.current;
       const filteredFights = pista ? fights.filter(f => f.pista === pista) : fights;
-      const pending = filteredFights.filter(f => f.status === 'pending').slice(0, 5);
+      const pending = filteredFights.filter(f => f.status === 'pending').slice(0, 10);
       const completed = filteredFights.filter(f => f.status === 'completed').reverse();
       console.log('📋 Peleas pendientes:', pending);
       console.log('✅ Peleas completadas:', completed);
@@ -438,25 +438,43 @@ export default function PublicDisplay() {
           {activeTab === 'pending' && (
             <div className="next-fights">
               {nextFights.length > 0 ? (
-                <ul>
+                <div className="upcoming-fights-list">
                   {nextFights.map((fight, idx) => (
-                    <li key={fight.id}>
-                      <span className="fight-number">#{idx + 1}</span>
-                      {(selectedTournament?.num_pistas || 1) > 1 && (
-                        <span style={{fontSize: '0.75rem', background: 'rgba(255,255,255,0.15)', padding: '0.1rem 0.4rem', borderRadius: '4px', marginRight: '0.25rem'}}>P{fight.pista}</span>
-                      )}
-                      <div className="fighter-info red-name">
-                        <span className="name">{fight.competitor_red}</span>
-                        {fight.academy_red && <span className="academy">({fight.academy_red})</span>}
+                    <div key={fight.id} className={`upcoming-fight-card ${idx === 0 ? 'upcoming-fight-next' : ''}`}>
+                      <div className="ufc-number">
+                        {idx === 0
+                          ? <span className="ufc-next-label">SIGUIENTE</span>
+                          : <span className="ufc-num">#{idx + 1}</span>
+                        }
                       </div>
-                      <span className="vs">vs</span>
-                      <div className="fighter-info blue-name">
-                        <span className="name">{fight.competitor_blue}</span>
-                        {fight.academy_blue && <span className="academy">({fight.academy_blue})</span>}
+                      <div className="ufc-body">
+                        <div className="ufc-red">
+                          <span className="ufc-corner-dot red-dot"></span>
+                          <div className="ufc-fighter">
+                            <span className="ufc-name">{fight.competitor_red}</span>
+                            {fight.academy_red && <span className="ufc-academy">{fight.academy_red}</span>}
+                          </div>
+                        </div>
+                        <div className="ufc-center">
+                          <span className="ufc-vs">VS</span>
+                          {(selectedTournament?.num_pistas || 1) > 1 && (
+                            <span className="ufc-pista-badge">P{fight.pista || 1}</span>
+                          )}
+                          {fight.bracket_round && (
+                            <span className="ufc-round-badge">{fight.bracket_round}</span>
+                          )}
+                        </div>
+                        <div className="ufc-blue">
+                          <div className="ufc-fighter ufc-fighter-right">
+                            <span className="ufc-name">{fight.competitor_blue}</span>
+                            {fight.academy_blue && <span className="ufc-academy">{fight.academy_blue}</span>}
+                          </div>
+                          <span className="ufc-corner-dot blue-dot"></span>
+                        </div>
                       </div>
-                    </li>
+                    </div>
                   ))}
-                </ul>
+                </div>
               ) : (
                 <p className="no-fights-message">No hay peleas pendientes</p>
               )}
