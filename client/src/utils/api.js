@@ -169,6 +169,13 @@ class API {
     return this.request(`/fights/${id}/advance`, { method: 'POST' });
   }
 
+  async repeatFight(id, tournamentId) {
+    return this.request(`/fights/${id}/repeat`, {
+      method: 'POST',
+      body: JSON.stringify({ tournamentId })
+    });
+  }
+
   async deleteFight(id) {
     return this.request(`/fights/${id}`, { method: 'DELETE' });
   }
@@ -219,6 +226,17 @@ class API {
       method: 'POST',
       body: JSON.stringify(data)
     });
+  }
+
+  async reorderBracketCompetitors(bracketId, orderedIds) {
+    return this.request(`/brackets/${bracketId}/competitors/reorder`, {
+      method: 'PUT',
+      body: JSON.stringify({ orderedIds })
+    });
+  }
+
+  async removeBracketCompetitor(competitorId) {
+    return this.request(`/brackets/competitor/${competitorId}`, { method: 'DELETE' });
   }
 
   // ============================================

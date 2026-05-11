@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import api from '../../utils/api';
 
 export default function BracketManager({ tournamentId, initialBracketId, onFightsCreated }) {
@@ -8,6 +8,9 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
   const [matches, setMatches] = useState([]);
   const [newCompetitors, setNewCompetitors] = useState([{ name: '', academy: '' }]);
   const [confirmWinner, setConfirmWinner] = useState(null); // { matchId, competitorId, competitorName }
+  const [draggingIdx, setDraggingIdx] = useState(null);
+  const dragItem = useRef(null);
+  const dragOverItem = useRef(null);
 
   useEffect(() => {
     if (tournamentId) loadBrackets();
@@ -74,15 +77,62 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
   };
 
   const handleGenerateBracket = async () => {
-    if (competitors.length < 2) {
-      alert('Se necesitan al menos 2 competidores');
+    const realCompetitors = competitors.filter(c => c.name !== 'BYE');
+    if (realCompetitors.length < 2) {
+      alert('Se necesitan al menos 2 competidores reales');
       return;
     }
+    // Guardar el orden actual en backend antes de generar
+    await api.reorderBracketCompetitors(selectedBracket.id, competitors.map(c => c.id));
     await api.generateBracketStructure(selectedBracket.id);
     loadMatches(selectedBracket.id);
     if (onFightsCreated) {
       onFightsCreated();
     }
+  };
+
+  // ─── Drag & Drop handlers ───────────────────────────────────────────
+  const handleDragStart = (idx) => {
+    dragItem.current = idx;
+    setDraggingIdx(idx);
+  };
+
+  const handleDragEnter = (idx) => {
+    dragOverItem.current = idx;
+  };
+
+  const handleDragEnd = () => {
+    const from = dragItem.current;
+    const to = dragOverItem.current;
+    if (from !== null && to !== null && from !== to) {
+      const newList = [...competitors];
+      const dragged = newList.splice(from, 1)[0];
+      newList.splice(to, 0, dragged);
+      setCompetitors(newList);
+    }
+    dragItem.current = null;
+    dragOverItem.current = null;
+    setDraggingIdx(null);
+  };
+
+  // Agregar un BYE al final de la lista
+  const handleAddBye = async () => {
+    if (!selectedBracket) return;
+    const seed = competitors.length + 1;
+    const res = await api.addBracketCompetitor({
+      bracket_id: selectedBracket.id,
+      name: 'BYE',
+      academy: '',
+      peto_color: null,
+      seed
+    });
+    loadCompetitors(selectedBracket.id);
+  };
+
+  // Quitar un competidor (o BYE) de la lista
+  const handleRemoveCompetitor = async (competitorId) => {
+    await api.removeBracketCompetitor(competitorId);
+    loadCompetitors(selectedBracket.id);
   };
 
   const handleCompetitorChange = (idx, field, value) => {
@@ -114,47 +164,118 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
 
   // Generar simulación de bracket basado en el número de competidores
   const generateSimulatedBracket = () => {
-    const numCompetitors = competitors.length;
-    if (numCompetitors < 2) return null;
+    if (competitors.length < 2) return null;
 
-    // Calcular el número de rondas necesarias
-    const numRounds = Math.ceil(Math.log2(numCompetitors));
-    const totalSlots = Math.pow(2, numRounds);
-    
+    // Misma lógica de slots que el backend
+    const hasManualByes = competitors.some(c => c.name === 'BYE');
+    const realComps = competitors.filter(c => c.name !== 'BYE');
+    const r = realComps.length;
+    if (r < 2) return null;
+
+    let slots; // cada slot: objeto competidor o null (BYE)
+    if (hasManualByes) {
+      slots = competitors.map(c => c.name !== 'BYE' ? c : null);
+    } else if (r % 2 === 1) {
+      slots = [realComps[0], null, ...realComps.slice(1)];
+    } else {
+      slots = [...realComps];
+    }
+
+    // Rellenar hasta potencia de 2
+    let size = 1;
+    while (size < slots.length) size *= 2;
+    if (size < 2) size = 2;
+    while (slots.length < size) slots.push(null);
+
+    const totalRounds = Math.log2(size);
+
+    // Función que determina si un slot de posición slotIdx en ronda r1
+    // (que tiene feeder = slot del árbol) es un BYE permanente.
+    // En ronda 1 todos los slots son permanentes (no hay ronda previa).
+    // El slot es perma-BYE si en ronda 1 el par correspondiente es null,
+    // lo que cascadea hacia arriba como BYE permanente.
+    const isGhost = (matchIdx) => {
+      // Un match de R1 es "fantasma" si ambos slots son null
+      const c1 = slots[matchIdx * 2];
+      const c2 = slots[matchIdx * 2 + 1];
+      return !c1 && !c2;
+    };
+
+    // Para ronda > 1: un slot es perma-BYE si el match de R1 que lo alimenta es fantasma
+    // (recursivo simplificado: solo necesitamos saber si la mitad del árbol que alimenta
+    //  ese slot tiene todos slots null)
+    const halfHasNoReal = (startSlot, count) => {
+      for (let i = startSlot; i < startSlot + count; i++) {
+        if (slots[i]) return false;
+      }
+      return true;
+    };
+
     const rounds = [];
-    let matchesInRound = totalSlots / 2;
-    
-    for (let round = 1; round <= numRounds; round++) {
+
+    for (let round = 1; round <= totalRounds; round++) {
+      const matchCount = size >> round;
       const roundMatches = [];
-      for (let i = 0; i < matchesInRound; i++) {
+
+      for (let i = 0; i < matchCount; i++) {
         if (round === 1) {
-          // Primera ronda: asignar competidores
-          const comp1Idx = i * 2;
-          const comp2Idx = i * 2 + 1;
+          const c1 = slots[i * 2];
+          const c2 = slots[i * 2 + 1];
+          const isGhostMatch = !c1 && !c2;
+          const isByeMatch   = (c1 && !c2) || (!c1 && c2);
           roundMatches.push({
             id: `sim-${round}-${i}`,
-            competitor1_name: competitors[comp1Idx]?.name || null,
-            competitor2_name: competitors[comp2Idx]?.name || null,
-            competitor1_id: competitors[comp1Idx]?.id || null,
-            competitor2_id: competitors[comp2Idx]?.id || null,
+            competitor1_name: c1?.name ?? null,
+            competitor2_name: c2?.name ?? null,
+            competitor1_id: c1?.id ?? null,
+            competitor2_id: c2?.id ?? null,
             round,
-            status: 'pending'
+            status: 'pending',
+            _ghost: isGhostMatch,  // match fantasma BYEvBYE
+            _bye: isByeMatch        // un competidor vs BYE
           });
         } else {
-          // Rondas siguientes: por definir
+          // Para rondas superiores, calculamos qué parte del árbol cae aquí
+          const slotsPerMatch = size >> (round - 1); // slots por cada match de ronda anterior
+          const startSlot = i * slotsPerMatch * 2;   // inicio en el arreglo original de slots
+          const leftHalf  = slots.slice(startSlot, startSlot + slotsPerMatch);
+          const rightHalf = slots.slice(startSlot + slotsPerMatch, startSlot + slotsPerMatch * 2);
+
+          const leftReal  = leftHalf.some(s => s !== null);
+          const rightReal = rightHalf.some(s => s !== null);
+
+          // ¿El slot viene de un único BYE que ya pasó automáticamente?
+          const leftSingle  = leftHalf.filter(s => s !== null).length === 1;
+          const rightSingle = rightHalf.filter(s => s !== null).length === 1;
+
+          let c1Name = null, c2Name = null;
+          if (!leftReal)       c1Name = null;       // fantasma
+          else if (leftSingle) c1Name = leftHalf.find(s => s !== null)?.name; // BYE-pass directo
+          else                 c1Name = '?';         // winner pendiente
+
+          if (!rightReal)       c2Name = null;
+          else if (rightSingle) c2Name = rightHalf.find(s => s !== null)?.name;
+          else                  c2Name = '?';
+
+          const isGhostMatch = !leftReal && !rightReal;
+          const isByeMatch   = (leftReal && !rightReal) || (!leftReal && rightReal);
+
           roundMatches.push({
             id: `sim-${round}-${i}`,
-            competitor1_name: null,
-            competitor2_name: null,
+            competitor1_name: c1Name,
+            competitor2_name: c2Name,
+            competitor1_id: null,
+            competitor2_id: null,
             round,
-            status: 'pending'
+            status: 'pending',
+            _ghost: isGhostMatch,
+            _bye: isByeMatch
           });
         }
       }
       rounds.push({ round, matches: roundMatches });
-      matchesInRound = matchesInRound / 2;
     }
-    
+
     return rounds;
   };
 
@@ -240,77 +361,99 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
             >
               {roundData.matches.map((match, idx) => {
                 const winnerId = match.winner_id ? Number(match.winner_id) : null;
-                const comp1Id = match.competitor1_id ? Number(match.competitor1_id) : null;
-                const comp2Id = match.competitor2_id ? Number(match.competitor2_id) : null;
+                const comp1Id  = match.competitor1_id ? Number(match.competitor1_id) : null;
+                const comp2Id  = match.competitor2_id ? Number(match.competitor2_id) : null;
                 const isComp1Winner = winnerId && comp1Id && winnerId === comp1Id;
                 const isComp2Winner = winnerId && comp2Id && winnerId === comp2Id;
-                
-                // Detectar si es un match con BYE (un competidor ya está, el otro viene de ronda anterior)
-                const hasBye = (match.competitor1_id && !match.competitor2_id) || (!match.competitor1_id && match.competitor2_id);
-                const byeCompetitorName = hasBye ? (match.competitor1_name || match.competitor2_name) : null;
-                
-                // Texto a mostrar para cada competidor
-                const comp1Display = match.competitor1_name || (hasBye && match.competitor2_name ? <em className="waiting-opponent">Ganador anterior</em> : <em>Por definir</em>);
-                const comp2Display = match.competitor2_name || (hasBye && match.competitor1_name ? <em className="waiting-opponent">Ganador anterior</em> : <em>Por definir</em>);
-                
-                // Determinar si el match es clickeable (ambos competidores presentes y sin ganador)
-                const isClickable = !isSimulated && match.competitor1_id && match.competitor2_id && !match.winner_id;
-                
+
+                // Match fantasma (BYEvBYE): solo placeholder vacío para mantener alineación
+                const isGhost = match._ghost === true ||
+                  (!match.competitor1_name && !match.competitor2_name && isSimulated);
+
+                // Match con BYE real (un real vs BYE)
+                const hasBye = isSimulated
+                  ? match._bye === true
+                  : (match.competitor1_id && !match.competitor2_id) || (!match.competitor1_id && match.competitor2_id);
+
+                // Texto de cada slot
+                const getSlotText = (name, isByeSlot) => {
+                  if (name === '?') return <em className="waiting-opponent">Ganador R. ant.</em>;
+                  if (name)        return name;
+                  if (isByeSlot)   return <em className="bye-slot-label">BYE</em>;
+                  return <em>Por definir</em>;
+                };
+
+                const isClickable = !isSimulated && comp1Id && comp2Id && !winnerId;
+
+                if (isGhost) {
+                  // Placeholder invisible para mantener alineación del árbol
+                  return (
+                    <div
+                      key={match.id}
+                      className="match-wrapper ghost-placeholder"
+                      style={{ minHeight: `${Math.max(70, matchSpacing - 10)}px`, visibility: 'hidden' }}
+                    >
+                      <div className="match-card pending" style={{ opacity: 0 }} />
+                      {!isLastRound && (
+                        <svg className="connector-svg" width="40" height="100%" style={{ position: 'absolute', right: '-40px', top: 0, height: '100%', opacity: 0 }}>
+                          <line x1="0" y1="50%" x2="20" y2="50%" stroke="#64748b" strokeWidth="2"/>
+                        </svg>
+                      )}
+                    </div>
+                  );
+                }
+
+                const isByeC1 = hasBye && !match.competitor1_name && !comp1Id;
+                const isByeC2 = hasBye && !match.competitor2_name && !comp2Id;
+
                 return (
-                <div 
-                  key={match.id} 
-                  className={`match-wrapper ${isSimulated ? 'simulated' : ''} ${hasBye ? 'has-bye' : ''}`}
-                  style={{ minHeight: `${Math.max(70, matchSpacing - 10)}px` }}
-                >
-                  <div className={`match-card ${match.status || 'pending'} ${isLastRound ? 'final-match' : ''}`}>
-                    <div 
-                      className={`match-player top ${isComp1Winner ? 'winner' : ''} ${!match.competitor1_id && hasBye ? 'bye-slot' : ''} ${isClickable ? 'clickable' : ''}`}
-                      onClick={() => isClickable && handleClickCompetitor(match, match.competitor1_id, match.competitor1_name)}
-                      title={isClickable ? `Clic para declarar ganador a ${match.competitor1_name}` : ''}
-                    >
-                      <span className="player-seed">{match.competitor1_name ? '●' : '○'}</span>
-                      <span className="player-name">
-                        {comp1Display}
-                      </span>
-                      {isComp1Winner && <span className="winner-badge">✓</span>}
-                      {hasBye && match.competitor1_name && <span className="bye-badge">BYE</span>}
-                    </div>
-                    <div className="match-vs">VS</div>
-                    <div 
-                      className={`match-player bottom ${isComp2Winner ? 'winner' : ''} ${!match.competitor2_id && hasBye ? 'bye-slot' : ''} ${isClickable ? 'clickable' : ''}`}
-                      onClick={() => isClickable && handleClickCompetitor(match, match.competitor2_id, match.competitor2_name)}
-                      title={isClickable ? `Clic para declarar ganador a ${match.competitor2_name}` : ''}
-                    >
-                      <span className="player-seed">{match.competitor2_name ? '●' : '○'}</span>
-                      <span className="player-name">
-                        {comp2Display}
-                      </span>
-                      {isComp2Winner && <span className="winner-badge">✓</span>}
-                      {hasBye && match.competitor2_name && <span className="bye-badge">BYE</span>}
-                    </div>
-                    {/* Mostrar ganador de la pelea */}
-                    {match.winner_name && (
-                      <div className="match-winner-label">
-                        🏆 {match.winner_name}
+                  <div
+                    key={match.id}
+                    className={`match-wrapper ${isSimulated ? 'simulated' : ''} ${hasBye ? 'has-bye' : ''}`}
+                    style={{ minHeight: `${Math.max(70, matchSpacing - 10)}px` }}
+                  >
+                    <div className={`match-card ${match.status || 'pending'} ${isLastRound ? 'final-match' : ''} ${hasBye ? 'bye-match' : ''}`}>
+                      <div
+                        className={`match-player top ${isComp1Winner ? 'winner' : ''} ${isByeC1 ? 'bye-slot' : ''} ${isClickable ? 'clickable' : ''}`}
+                        onClick={() => isClickable && handleClickCompetitor(match, comp1Id, match.competitor1_name)}
+                        title={isClickable ? `Clic para declarar ganador a ${match.competitor1_name}` : ''}
+                      >
+                        <span className="player-seed">{match.competitor1_name && match.competitor1_name !== '?' ? '●' : '○'}</span>
+                        <span className="player-name">{getSlotText(match.competitor1_name, isByeC1)}</span>
+                        {isComp1Winner && <span className="winner-badge">✓</span>}
+                        {hasBye && match.competitor1_name && match.competitor1_name !== '?' && <span className="bye-badge">BYE ↑</span>}
                       </div>
+                      <div className="match-vs">{hasBye ? '—' : 'VS'}</div>
+                      <div
+                        className={`match-player bottom ${isComp2Winner ? 'winner' : ''} ${isByeC2 ? 'bye-slot' : ''} ${isClickable ? 'clickable' : ''}`}
+                        onClick={() => isClickable && handleClickCompetitor(match, comp2Id, match.competitor2_name)}
+                        title={isClickable ? `Clic para declarar ganador a ${match.competitor2_name}` : ''}
+                      >
+                        <span className="player-seed">{match.competitor2_name && match.competitor2_name !== '?' ? '●' : '○'}</span>
+                        <span className="player-name">{getSlotText(match.competitor2_name, isByeC2)}</span>
+                        {isComp2Winner && <span className="winner-badge">✓</span>}
+                        {hasBye && match.competitor2_name && match.competitor2_name !== '?' && <span className="bye-badge">BYE ↑</span>}
+                      </div>
+                      {match.winner_name && (
+                        <div className="match-winner-label">🏆 {match.winner_name}</div>
+                      )}
+                    </div>
+                    {/* Conector derecho */}
+                    {!isLastRound && (
+                      <svg className="connector-svg" width="40" height="100%" style={{ position: 'absolute', right: '-40px', top: 0, height: '100%' }}>
+                        <line x1="0" y1="50%" x2="20" y2="50%" stroke="#64748b" strokeWidth="2"/>
+                        {idx % 2 === 0 ? (
+                          <line x1="20" y1="50%" x2="20" y2="100%" stroke="#64748b" strokeWidth="2"/>
+                        ) : (
+                          <line x1="20" y1="0" x2="20" y2="50%" stroke="#64748b" strokeWidth="2"/>
+                        )}
+                        {idx % 2 === 1 && (
+                          <line x1="20" y1="50%" x2="40" y2="50%" stroke="#64748b" strokeWidth="2"/>
+                        )}
+                      </svg>
                     )}
                   </div>
-                  {/* Conector derecho */}
-                  {!isLastRound && (
-                    <svg className="connector-svg" width="40" height="100%" style={{ position: 'absolute', right: '-40px', top: 0, height: '100%' }}>
-                      <line x1="0" y1="50%" x2="20" y2="50%" stroke="#64748b" strokeWidth="2"/>
-                      {idx % 2 === 0 ? (
-                        <line x1="20" y1="50%" x2="20" y2="100%" stroke="#64748b" strokeWidth="2"/>
-                      ) : (
-                        <line x1="20" y1="0" x2="20" y2="50%" stroke="#64748b" strokeWidth="2"/>
-                      )}
-                      {idx % 2 === 1 && (
-                        <line x1="20" y1="50%" x2="40" y2="50%" stroke="#64748b" strokeWidth="2"/>
-                      )}
-                    </svg>
-                  )}
-                </div>
-              );
+                );
               })}
             </div>
           </div>
@@ -377,26 +520,63 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
             </form>
           </div>
 
-          {/* Lista de competidores */}
+          {/* Lista de competidores con drag & drop */}
           <div className="competitors-list-compact">
-            <h4>👥 Competidores ({competitors.length})</h4>
+            <h4>
+              👥 Competidores ({competitors.filter(c => c.name !== 'BYE').length})
+              {matches.length === 0 && competitors.length > 0 && (
+                <span className="dnd-hint"> · Arrastra para reordenar</span>
+              )}
+            </h4>
             {competitors.length > 0 ? (
-              <div className="competitors-chips">
+              <div className="competitors-dnd-list">
                 {competitors.map((c, idx) => (
-                  <span key={c.id} className="competitor-chip">
+                  <div
+                    key={c.id}
+                    className={`dnd-competitor-row ${c.name === 'BYE' ? 'bye-row' : ''} ${draggingIdx === idx ? 'dragging' : ''}`}
+                    draggable={matches.length === 0}
+                    onDragStart={() => handleDragStart(idx)}
+                    onDragEnter={() => handleDragEnter(idx)}
+                    onDragEnd={handleDragEnd}
+                    onDragOver={e => e.preventDefault()}
+                  >
+                    {matches.length === 0 && (
+                      <span className="drag-handle" title="Arrastrar para reordenar">⠿</span>
+                    )}
                     <span className="chip-number">{idx + 1}</span>
-                    {c.name}
-                    {c.academy && <small>({c.academy})</small>}
-                  </span>
+                    {c.name === 'BYE'
+                      ? <span className="bye-label">BYE <em>(posición libre)</em></span>
+                      : <span className="comp-name">{c.name}{c.academy && <small> ({c.academy})</small>}</span>
+                    }
+                    {matches.length === 0 && (
+                      <button
+                        className="btn-remove-comp"
+                        title="Quitar"
+                        onClick={() => handleRemoveCompetitor(c.id)}
+                      >×</button>
+                    )}
+                  </div>
                 ))}
               </div>
             ) : (
               <p className="no-competitors">No hay competidores agregados</p>
             )}
-            {competitors.length >= 2 && matches.length === 0 && (
-              <button onClick={handleGenerateBracket} className="btn-primary btn-generate">
-                🎯 Generar Bracket Oficial
-              </button>
+            {matches.length === 0 && competitors.length >= 2 && (
+              <div className="bracket-actions">
+                <button onClick={handleAddBye} className="btn-small btn-bye">
+                  ➕ Agregar BYE
+                </button>
+                <button onClick={handleGenerateBracket} className="btn-primary btn-generate">
+                  🎯 Generar Bracket Oficial
+                </button>
+              </div>
+            )}
+            {matches.length === 0 && competitors.length === 1 && (
+              <div className="bracket-actions">
+                <button onClick={handleAddBye} className="btn-small btn-bye">
+                  ➕ Agregar BYE
+                </button>
+              </div>
             )}
           </div>
 
@@ -612,24 +792,99 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
           margin: 0 0 0.75rem 0;
           font-size: 0.95rem;
           color: #334155;
-        }
-        
-        .competitors-chips {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 0.5rem;
-        }
-        
-        .competitor-chip {
-          background: linear-gradient(135deg, #e0e7ff, #c7d2fe);
-          padding: 0.4rem 0.75rem;
-          border-radius: 20px;
-          font-size: 0.8rem;
-          font-weight: 500;
-          color: #3730a3;
           display: flex;
           align-items: center;
-          gap: 0.4rem;
+          gap: 0.5rem;
+          flex-wrap: wrap;
+        }
+        
+        .dnd-hint {
+          font-size: 0.75rem;
+          color: #94a3b8;
+          font-weight: 400;
+        }
+        
+        .competitors-dnd-list {
+          display: flex;
+          flex-direction: column;
+          gap: 0.35rem;
+        }
+        
+        .dnd-competitor-row {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          background: linear-gradient(135deg, #e0e7ff, #c7d2fe);
+          padding: 0.4rem 0.6rem;
+          border-radius: 8px;
+          font-size: 0.82rem;
+          font-weight: 500;
+          color: #3730a3;
+          cursor: grab;
+          user-select: none;
+          transition: opacity 0.2s, transform 0.15s, box-shadow 0.15s;
+          border: 2px solid transparent;
+        }
+        
+        .dnd-competitor-row:active {
+          cursor: grabbing;
+        }
+        
+        .dnd-competitor-row.dragging {
+          opacity: 0.4;
+          transform: scale(0.97);
+          border-color: #6366f1;
+          box-shadow: 0 4px 12px rgba(99,102,241,0.3);
+        }
+        
+        .dnd-competitor-row.bye-row {
+          background: linear-gradient(135deg, #fef3c7, #fde68a);
+          color: #92400e;
+        }
+        
+        .drag-handle {
+          color: #6366f1;
+          font-size: 1.1rem;
+          cursor: grab;
+          opacity: 0.6;
+          flex-shrink: 0;
+        }
+        
+        .bye-label {
+          flex: 1;
+          font-style: italic;
+        }
+        
+        .bye-label em {
+          font-weight: 400;
+          font-size: 0.75rem;
+          opacity: 0.7;
+        }
+        
+        .comp-name {
+          flex: 1;
+        }
+        
+        .comp-name small {
+          color: #6366f1;
+          font-weight: 400;
+          margin-left: 0.25rem;
+        }
+        
+        .btn-remove-comp {
+          background: none;
+          border: none;
+          color: #ef4444;
+          cursor: pointer;
+          font-size: 1rem;
+          padding: 0 0.2rem;
+          line-height: 1;
+          opacity: 0.7;
+          flex-shrink: 0;
+        }
+        
+        .btn-remove-comp:hover {
+          opacity: 1;
         }
         
         .chip-number {
@@ -642,11 +897,7 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
           align-items: center;
           justify-content: center;
           font-size: 0.7rem;
-        }
-        
-        .competitor-chip small {
-          color: #6366f1;
-          font-weight: 400;
+          flex-shrink: 0;
         }
         
         .no-competitors {
@@ -655,11 +906,33 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
           margin: 0;
         }
         
-        .btn-generate {
+        .bracket-actions {
+          display: flex;
+          gap: 0.5rem;
           margin-top: 1rem;
-          padding: 0.75rem 1.5rem;
+          flex-wrap: wrap;
+        }
+        
+        .btn-bye {
+          background: linear-gradient(135deg, #fbbf24, #f59e0b);
+          color: #78350f;
+          border: none;
+          padding: 0.5rem 1rem;
+          border-radius: 8px;
+          cursor: pointer;
+          font-size: 0.82rem;
+          font-weight: 600;
+        }
+        
+        .btn-bye:hover {
+          background: linear-gradient(135deg, #f59e0b, #d97706);
+        }
+        
+        .btn-generate {
+          flex: 1;
+          padding: 0.6rem 1rem;
           font-size: 0.9rem;
-          width: 100%;
+          min-width: 160px;
         }
         
         /* ========================================

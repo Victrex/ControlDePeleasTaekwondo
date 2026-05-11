@@ -67,6 +67,7 @@ router.post('/fights/:id/complete', requireAdmin, fightController.completeAndAdv
 router.post('/fights/:id/cancel', requireAdmin, fightController.cancel);
 router.post('/fights/:id/postpone', requireAdmin, fightController.postpone);
 router.post('/fights/:id/advance', requireAdmin, fightController.advance);
+router.post('/fights/:id/repeat', requireAdmin, fightController.repeatFight);
 router.delete('/fights/:id', requireAdmin, fightController.delete);
 
 // ============================================
@@ -79,6 +80,8 @@ router.get('/brackets/:bracket_id/competitors', bracketController.getCompetitors
 router.post('/brackets/:bracket_id/generate', requireAdmin, bracketController.generateStructure);
 router.get('/brackets/:bracket_id/matches', bracketController.getMatches);
 router.post('/brackets/match/:match_id/winner', requireAdmin, bracketController.setMatchWinner);
+router.put('/brackets/:bracket_id/competitors/reorder', requireAdmin, bracketController.reorderCompetitors);
+router.delete('/brackets/competitor/:competitor_id', requireAdmin, bracketController.removeCompetitor);
 
 // ============================================
 // RUTAS DE SCORING / PUNTUACIÓN

@@ -205,9 +205,10 @@ export const timerService = {
       }
       if (redWins >= needed || blueWins >= needed) {
         const finalWinner = redWins >= needed ? 'red' : 'blue';
-        db.prepare('UPDATE fights SET final_winner = ? WHERE id = ?').run(finalWinner, fightId);
+        db.prepare("UPDATE fights SET final_winner = ?, status = 'completed' WHERE id = ?").run(finalWinner, fightId);
         const finalFight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
         io.emit('fight:result-registered', finalFight);
+        io.emit('fight:updated', finalFight);
         return; // Fight is over — do not advance to next round
       }
     }

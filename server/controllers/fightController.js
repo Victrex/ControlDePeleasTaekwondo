@@ -3,6 +3,7 @@ import { Fight } from "../models/Fight.js";
 import { TournamentConfig } from "../models/TournamentConfig.js";
 import db from "../config/database.js";
 import { bracketController } from "./bracketController.js";
+import { timerService } from "../services/timerService.js";
 
 export const fightController = {
   // Crear pelea
@@ -221,6 +222,21 @@ export const fightController = {
     } catch (error) {
       console.error("Error completando pelea:", error);
       res.status(400).json({ error: error.message });
+    }
+  },
+
+  // Repetir pelea completada
+  repeatFight(req, res) {
+    try {
+      const { id } = req.params;
+      const { tournamentId } = req.body;
+      // Limpiar estado de timer en memoria
+      timerService.cleanup(parseInt(id));
+      const fight = FightService.repeatFight(parseInt(id), tournamentId);
+      res.json({ success: true, fight });
+    } catch (error) {
+      console.error("Error repitiendo pelea:", error);
+      res.status(500).json({ error: error.message });
     }
   },
 

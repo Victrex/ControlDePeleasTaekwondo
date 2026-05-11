@@ -211,9 +211,10 @@ export const scoringController = {
 
       if (redWins >= needed || blueWins >= needed) {
         const finalWinner = redWins >= needed ? 'red' : 'blue';
-        db.prepare('UPDATE fights SET final_winner = ? WHERE id = ?').run(finalWinner, fightId);
+        db.prepare("UPDATE fights SET final_winner = ?, status = 'completed' WHERE id = ?").run(finalWinner, fightId);
         fight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
         io.emit('fight:result-registered', fight);
+        io.emit('fight:updated', fight);
       }
 
       res.json({ success: true, fight });

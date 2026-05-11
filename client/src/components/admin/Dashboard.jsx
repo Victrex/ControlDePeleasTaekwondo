@@ -24,8 +24,9 @@ export default function Dashboard() {
   const [showBracketModal, setShowBracketModal] = useState(false);
   const [selectedBracketId, setSelectedBracketId] = useState(null);
   const [pistaFilter, setPistaFilter] = useState('');
-  const [showScoringConfig, setShowScoringConfig] = useState(false);
+  const [showScoringConfig, setShowScoringConfig] = useState(null);
   const [scoringConfig, setScoringConfig] = useState(null);
+  const [openMenuTournamentId, setOpenMenuTournamentId] = useState(null);
   
   // Form states
   const [tournamentForm, setTournamentForm] = useState({
@@ -50,6 +51,9 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadTournaments();
+    const closeMenu = () => setOpenMenuTournamentId(null);
+    document.addEventListener('click', closeMenu);
+    return () => document.removeEventListener('click', closeMenu);
   }, []);
 
   useEffect(() => {
@@ -73,7 +77,7 @@ export default function Dashboard() {
   }, [socket, selectedTournament]);
 
   const handleFightUpdate = (data) => {
-    if (selectedTournament && data.tournamentId === selectedTournament.id) {
+    if (selectedTournament && data.tournament_id === selectedTournament.id) {
       loadFights(selectedTournament.id);
     }
   };
@@ -84,12 +88,29 @@ export default function Dashboard() {
     }
   };
 
+  const selectTournament = (tournament) => {
+    setSelectedTournament(tournament);
+    if (tournament) {
+      localStorage.setItem('selectedTournamentId', tournament.id);
+    } else {
+      localStorage.removeItem('selectedTournamentId');
+    }
+  };
+
   const loadTournaments = async () => {
     try {
       const data = await api.getTournaments();
       setTournaments(data);
-      if (data.length > 0 && !selectedTournament) {
-        setSelectedTournament(data[0]);
+      if (data.length > 0) {
+        const savedId = localStorage.getItem('selectedTournamentId');
+        if (!selectedTournament) {
+          const saved = savedId ? data.find(t => t.id === parseInt(savedId)) : null;
+          selectTournament(saved || data[0]);
+        } else {
+          // Actualizar el objeto del torneo seleccionado con los datos frescos de la BD
+          const refreshed = data.find(t => t.id === selectedTournament.id);
+          if (refreshed) setSelectedTournament(refreshed);
+        }
       }
     } catch (error) {
       console.error('Error cargando torneos:', error);
@@ -118,7 +139,7 @@ export default function Dashboard() {
     try {
       const newTournament = await api.createTournament(tournamentForm);
       setTournaments([...tournaments, newTournament]);
-      setSelectedTournament(newTournament);
+      selectTournament(newTournament);
       setShowNewTournament(false);
       setTournamentForm({ name: '', category: '', division: '', weight_class: '', num_pistas: 1 });
     } catch (error) {
@@ -132,30 +153,28 @@ export default function Dashboard() {
     if (creatingFight) return;
     try {
       setCreatingFight(true);
-      // Asignar colores automáticamente: azul, rojo, azul, rojo...
-      const competitorsWithColor = competitors.map((c, idx) => ({
-        ...c,
-        peto_color: idx % 2 === 0 ? 'blue' : 'red'
-      }));
-      // Para la pelea principal, usar los dos primeros
-      const fightRes = await api.createFightForBracket({
+      // Obtener cuántas llaves hay para nombrar la nueva
+      const existingBrackets = await api.getBracketsByTournament(selectedTournament.id);
+      const bracketName = `Llave ${existingBrackets.length + 1}`;
+      // Crear la llave (bracket) sin generar peleas todavía
+      const bracketRes = await api.createBracket({
         tournament_id: selectedTournament.id,
-        competitors: competitorsWithColor
+        name: bracketName
       });
-      // Buscar la última llave creada para este torneo
-      const brackets = await api.getBracketsByTournament(selectedTournament.id);
-      const newBracket = brackets[brackets.length - 1];
-      // Asociar todos los peleadores a la nueva llave
+      const newBracket = bracketRes.bracket || bracketRes;
+      // Agregar todos los competidores a la llave
       for (let i = 0; i < competitors.length; i++) {
         await api.addBracketCompetitor({
           bracket_id: newBracket.id,
           name: competitors[i].name,
           academy: competitors[i].academy,
-          peto_color: i < 2 * Math.floor(competitors.length / 2) ? (i % 2 === 0 ? 'blue' : 'red') : null
+          peto_color: i % 2 === 0 ? 'blue' : 'red',
+          seed: i + 1
         });
       }
-      await api.generateBracketStructure(fightRes.bracket_id);
-      loadFights(selectedTournament.id);
+      // Abrir el editor de bracket para que el usuario reordene antes de generar
+      setSelectedBracketId(newBracket.id);
+      setShowBracketModal(true);
       setShowNewFight(false);
       setFightForm({ competitor_red: '', competitor_blue: '', academy_red: '', academy_blue: '' });
       setCompetitors([
@@ -163,7 +182,7 @@ export default function Dashboard() {
         { name: '', academy: '' }
       ]);
     } catch (error) {
-      alert('Error creando pelea: ' + error.message);
+      alert('Error creando llave: ' + error.message);
     } finally {
       setCreatingFight(false);
     }
@@ -193,6 +212,17 @@ export default function Dashboard() {
       loadFights(selectedTournament.id);
     } catch (error) {
       alert('Error completando pelea: ' + error.message);
+    }
+  };
+
+  // Repetir pelea completada
+  const handleRepeatFight = async (fightId) => {
+    if (!window.confirm('¿Repetir esta pelea? Se resetearán todos los puntajes y rondas.')) return;
+    try {
+      await api.repeatFight(fightId, selectedTournament.id);
+      loadFights(selectedTournament.id);
+    } catch (error) {
+      alert('Error repitiendo pelea: ' + error.message);
     }
   };
 
@@ -264,6 +294,22 @@ export default function Dashboard() {
     navigate('/login');
   };
 
+  const handleSetActiveTournament = (e, tournament) => {
+    e.stopPropagation();
+    selectTournament(tournament);
+  };
+
+  const handleChangeTournamentStatus = async (e, tournament, newStatus) => {
+    e.stopPropagation();
+    setOpenMenuTournamentId(null);
+    try {
+      await api.updateTournament(tournament.id, { status: newStatus });
+      await loadTournaments();
+    } catch (err) {
+      alert('Error cambiando estado: ' + err.message);
+    }
+  };
+
   if (loading) {
     return (
       <div className="loading-screen">
@@ -301,10 +347,49 @@ export default function Dashboard() {
               <li 
                 key={t.id}
                 className={selectedTournament?.id === t.id ? 'active' : ''}
-                onClick={() => setSelectedTournament(t)}
+                onClick={() => { selectTournament(t); setOpenMenuTournamentId(null); }}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', position: 'relative' }}
               >
-                <span className="tournament-name">{t.name}</span>
-                <span className={`status-badge ${t.status}`}>{t.status}</span>
+                <span className="tournament-name" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexShrink: 0 }}>
+                  <span className={`status-badge ${t.status}`}>{t.status}</span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setOpenMenuTournamentId(openMenuTournamentId === t.id ? null : t.id); }}
+                    title="Opciones"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.1rem', lineHeight: 1, padding: '0 3px', color: 'inherit', opacity: 0.7 }}
+                  >
+                    ⋮
+                  </button>
+                </div>
+                {openMenuTournamentId === t.id && (
+                  <div
+                    onClick={e => e.stopPropagation()}
+                    style={{
+                      position: 'absolute', right: 0, top: '100%', zIndex: 100,
+                      background: '#2d3748', border: '1px solid #4a5568', borderRadius: '6px',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.4)', minWidth: '160px', overflow: 'hidden'
+                    }}
+                  >
+                    <div style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem', color: '#a0aec0', borderBottom: '1px solid #4a5568' }}>Cambiar estado</div>
+                    {[['active', '🟢 Activo'], ['completed', '✅ Completado'], ['cancelled', '❌ Cancelado']].map(([status, label]) => (
+                      <button
+                        key={status}
+                        onClick={(e) => handleChangeTournamentStatus(e, t, status)}
+                        disabled={t.status === status}
+                        style={{
+                          display: 'block', width: '100%', textAlign: 'left',
+                          padding: '0.5rem 0.75rem', background: t.status === status ? 'rgba(255,255,255,0.08)' : 'none',
+                          border: 'none', color: t.status === status ? '#fff' : '#e2e8f0',
+                          cursor: t.status === status ? 'default' : 'pointer', fontSize: '0.85rem'
+                        }}
+                        onMouseEnter={e => { if (t.status !== status) e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
+                        onMouseLeave={e => { if (t.status !== status) e.currentTarget.style.background = 'none'; }}
+                      >
+                        {label}{t.status === status ? ' ✓' : ''}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </li>
             ))}
           </ul>
@@ -355,6 +440,27 @@ export default function Dashboard() {
                 >
                   ⚙ Config Scoring
                 </button>
+                <button
+                  onClick={() => {
+                    const url = `${window.location.origin}/public/${selectedTournament.id}`;
+                    navigator.clipboard.writeText(url).then(() => alert('Enlace copiado al portapapeles:\n' + url));
+                  }}
+                  className="btn-primary"
+                  style={{ marginLeft: '0.5rem', background: '#2980b9' }}
+                  title="Copiar enlace público del torneo"
+                >
+                  🔗 Enlace Público
+                </button>
+                <a
+                  href={`/public/${selectedTournament.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-primary"
+                  style={{ marginLeft: '0.5rem', background: '#27ae60', color: 'white', textDecoration: 'none', display: 'inline-block' }}
+                  title="Abrir pantalla pública del torneo en nueva pestaña"
+                >
+                  📺 Ver Público
+                </a>
                 {/* Bracket Manager Integration */}
                 {/* <BracketManager tournamentId={selectedTournament.id} /> */}
               </div>
@@ -595,6 +701,16 @@ export default function Dashboard() {
                             >
                               🥋 Scoring
                             </Link>
+                          )}
+                          {fight.status === 'completed' && fight.final_winner && (
+                            <button
+                              onClick={() => handleRepeatFight(fight.id)}
+                              className="btn-small"
+                              style={{ background: '#e67e22', color: 'white' }}
+                              title="Resetear la pelea y ponerla en curso nuevamente"
+                            >
+                              🔄 Repetir
+                            </button>
                           )}
                           <button 
                             onClick={() => {

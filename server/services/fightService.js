@@ -360,6 +360,50 @@ export class FightService {
     }
   }
 
+  // Repetir una pelea completada: la resetea y la pone como actual
+  static repeatFight(fightId, tournamentId) {
+    const fight = Fight.findById(fightId);
+    if (!fight) throw new Error('Pelea no encontrada');
+    if (fight.status !== 'completed') throw new Error('Solo se puede repetir una pelea completada');
+
+    const pista = fight.pista || 1;
+
+    // Enviar cualquier pelea actual de la misma pista a la cola
+    db.prepare(
+      "UPDATE fights SET status = 'pending' WHERE tournament_id = ? AND status = 'current' AND pista = ?"
+    ).run(tournamentId, pista);
+
+    // Resetear scores y ganadores, y poner la pelea como actual
+    db.prepare(`
+      UPDATE fights SET
+        status = 'current',
+        final_winner = NULL,
+        victory_type = NULL,
+        round_1_winner = NULL,
+        round_2_winner = NULL,
+        round_3_winner = NULL,
+        score_red = 0,
+        score_blue = 0,
+        gam_jeom_red = 0,
+        gam_jeom_blue = 0,
+        current_round = 1,
+        timer_remaining_ms = NULL,
+        timer_running = 0,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(fightId);
+
+    // Eliminar todos los eventos de puntuación de esta pelea
+    db.prepare('DELETE FROM fight_scores WHERE fight_id = ?').run(fightId);
+    db.prepare('DELETE FROM judge_inputs WHERE fight_id = ?').run(fightId);
+
+    const updatedFight = Fight.findById(fightId);
+    emitEvents.fightUpdated(updatedFight);
+    emitEvents.currentFightChanged(updatedFight);
+
+    return updatedFight;
+  }
+
   // Crear pelea desde un match de bracket
   static createFightFromMatch(tournamentId, bracketId, match) {
     const fightData = {

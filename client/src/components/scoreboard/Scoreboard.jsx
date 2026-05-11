@@ -68,6 +68,8 @@ export default function Scoreboard() {
   const [kyeShieMs, setKyeShieMs] = useState(60000);
   const [kyeShieActive, setKyeShieActive] = useState(false);
 
+  const [currentFightModal, setCurrentFightModal] = useState(null); // null | { message, fightId }
+
   const fightIdRef = useRef(fightId);
   fightIdRef.current = fightId;
   const configRef = useRef(config);
@@ -335,11 +337,21 @@ export default function Scoreboard() {
     if (!fight) return;
     try {
       const current = await api.getCurrentFight(fight.tournament_id, fight.pista);
-      if (current && current.id && String(current.id) !== String(fightId)) {
-        navigate(`/scoreboard/${current.id}`);
+      if (!current || !current.id) {
+        setCurrentFightModal({ message: `No hay pelea actual configurada en Pista ${fight.pista || 1}.`, fightId: null });
+        return;
       }
+      if (String(current.id) === String(fightId)) {
+        setCurrentFightModal({ message: `Ya estás en la pelea actual de Pista ${fight.pista || 1}.`, fightId: null });
+        return;
+      }
+      setCurrentFightModal({
+        message: `¿Ir a la pelea actual de Pista ${fight.pista || 1}?\n${current.competitor_red || '?'} vs ${current.competitor_blue || '?'}`,
+        fightId: current.id,
+      });
     } catch (e) {
       console.error("Error buscando pelea actual:", e);
+      setCurrentFightModal({ message: `Error al buscar la pelea actual: ${e.message}`, fightId: null });
     }
   }
 
@@ -595,6 +607,39 @@ export default function Scoreboard() {
           )}
         </div>
       </div>
+
+      {/* Modal: ir a pelea actual */}
+      {currentFightModal && (
+        <div
+          className="sb-modal-overlay"
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999 }}
+          onClick={() => setCurrentFightModal(null)}
+        >
+          <div
+            className="sb-modal-box"
+            style={{ background: '#1a1a2e', border: '2px solid #fff', borderRadius: 12, padding: '2rem 2.5rem', minWidth: 320, maxWidth: 480, textAlign: 'center', color: '#fff' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p style={{ fontSize: '1.15rem', marginBottom: '1.5rem', whiteSpace: 'pre-line' }}>{currentFightModal.message}</p>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              {currentFightModal.fightId && (
+                <button
+                  style={{ padding: '0.6rem 1.4rem', background: '#00c853', color: '#000', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}
+                  onClick={() => { setCurrentFightModal(null); navigate(`/scoreboard/${currentFightModal.fightId}`); }}
+                >
+                  Ir
+                </button>
+              )}
+              <button
+                style={{ padding: '0.6rem 1.4rem', background: '#555', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}
+                onClick={() => setCurrentFightModal(null)}
+              >
+                {currentFightModal.fightId ? 'Cancelar' : 'Cerrar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <div className="scoreboard-footer" style={{ zIndex: 9000 }}>

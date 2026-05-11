@@ -501,6 +501,17 @@ export default function ScoringControl() {
     }
   }
 
+  async function handleRepeatFight() {
+    if (!fight) return;
+    if (!window.confirm('¿Repetir esta pelea? Se resetearán todos los puntajes y rondas.')) return;
+    try {
+      await api.repeatFight(fight.id, fight.tournament_id);
+      await loadState();
+    } catch (e) {
+      alert('Error repitiendo pelea: ' + e.message);
+    }
+  }
+
   if (!fight) {
     return <div className="sc-loading"><div className="spinner"></div><p>Cargando...</p></div>;
   }
@@ -518,6 +529,25 @@ export default function ScoringControl() {
           <Link to={`/judge/${fightId}?judgeId=1`} target="_blank" className="sc-link">⚖ Juez externo</Link>
         </div>
       </div>
+
+      {/* Banner: pelea terminada */}
+      {fight.status === 'completed' && fight.final_winner && (
+        <div style={{ background: '#2d6a4f', color: 'white', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', borderBottom: '3px solid #1b4332' }}>
+          <div style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>
+            🏆 Pelea finalizada — Ganador:{' '}
+            <span style={{ textTransform: 'uppercase' }}>
+              {fight.final_winner === 'red' ? '🔴 Rojo' : '🔵 Azul'}
+            </span>
+            {fight.victory_type && <span style={{ marginLeft: '0.75rem', fontSize: '0.9rem', opacity: 0.85 }}>({fight.victory_type})</span>}
+          </div>
+          <button
+            onClick={handleRepeatFight}
+            style={{ background: '#e67e22', color: 'white', border: 'none', borderRadius: '6px', padding: '0.4rem 1rem', cursor: 'pointer', fontWeight: 'bold', whiteSpace: 'nowrap' }}
+          >
+            🔄 Repetir pelea
+          </button>
+        </div>
+      )}
 
       {/* Judges / Gamepads panel */}
       <div className="sc-judges-panel">
