@@ -135,6 +135,27 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
     loadCompetitors(selectedBracket.id);
   };
 
+  const handleDeleteBracket = async (bracket) => {
+    const confirmed = window.confirm(
+      `⚠️ ELIMINAR LLAVE\n\n"${bracket.name}"\n\nSe eliminarán todas sus peleas, competidores y partidas.\nEsta acción NO se puede deshacer.\n\n¿Confirmas?`
+    );
+    if (!confirmed) return;
+    try {
+      const result = await api.deleteBracket(bracket.id);
+      // Si la llave eliminada era la seleccionada, limpiar selección
+      if (selectedBracket?.id === bracket.id) {
+        setSelectedBracket(null);
+        setCompetitors([]);
+        setMatches([]);
+      }
+      await loadBrackets();
+      if (onFightsCreated) onFightsCreated();
+      alert(`✅ ${result.message}\n(${result.deleted.fights} peleas, ${result.deleted.competitors} competidores eliminados)`);
+    } catch (err) {
+      alert('Error eliminando llave: ' + err.message);
+    }
+  };
+
   const handleCompetitorChange = (idx, field, value) => {
     const updated = [...newCompetitors];
     updated[idx][field] = value;
@@ -472,15 +493,29 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
   return (
     <div className="bracket-manager">
       {brackets.length > 0 && (
-        <div className="bracket-tabs">
+      <div className="bracket-tabs">
           {brackets.map(b => (
-            <button
-              key={b.id}
-              className={`bracket-tab ${selectedBracket?.id === b.id ? 'active' : ''}`}
-              onClick={() => setSelectedBracket(b)}
-            >
-              {b.name}
-            </button>
+            <div key={b.id} style={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
+              <button
+                className={`bracket-tab ${selectedBracket?.id === b.id ? 'active' : ''}`}
+                onClick={() => setSelectedBracket(b)}
+              >
+                {b.name}
+              </button>
+              <button
+                onClick={() => handleDeleteBracket(b)}
+                title={`Eliminar ${b.name}`}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: '#fc8181', fontSize: '0.8rem', padding: '2px 4px',
+                  lineHeight: 1, opacity: 0.7
+                }}
+                onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+                onMouseLeave={e => e.currentTarget.style.opacity = '0.7'}
+              >
+                🗑️
+              </button>
+            </div>
           ))}
         </div>
       )}

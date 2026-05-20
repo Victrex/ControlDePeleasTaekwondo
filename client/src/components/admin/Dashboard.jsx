@@ -310,6 +310,36 @@ export default function Dashboard() {
     }
   };
 
+  const handleDeleteTournament = async (e, tournament) => {
+    e.stopPropagation();
+    setOpenMenuTournamentId(null);
+    const confirmed = window.confirm(
+      `⚠️ ELIMINAR TORNEO\n\n` +
+      `"${tournament.name}"\n\n` +
+      `Se eliminarán en cascada:\n` +
+      `• Todas las llaves (brackets)\n` +
+      `• Todas las peleas\n` +
+      `• Todos los puntajes y registros\n\n` +
+      `Esta acción NO se puede deshacer.\n\n` +
+      `¿Confirmas la eliminación?`
+    );
+    if (!confirmed) return;
+    try {
+      const result = await api.deleteTournament(tournament.id);
+      if (selectedTournament?.id === tournament.id) {
+        setSelectedTournament(null);
+        setFights([]);
+        setBrackets([]);
+        setCurrentFights([]);
+        localStorage.removeItem('selectedTournamentId');
+      }
+      await loadTournaments();
+      alert(`✅ ${result.message}\n(${result.deleted.fights} peleas, ${result.deleted.brackets} llaves, ${result.deleted.scores} puntajes eliminados)`);
+    } catch (err) {
+      alert('Error eliminando torneo: ' + err.message);
+    }
+  };
+
   if (loading) {
     return (
       <div className="loading-screen">
@@ -391,6 +421,21 @@ export default function Dashboard() {
                         {label}{t.status === status ? ' ✓' : ''}
                       </button>
                     ))}
+                    <div style={{ borderTop: '1px solid #4a5568', marginTop: '0.25rem', paddingTop: '0.25rem' }}>
+                      <button
+                        onClick={(e) => handleDeleteTournament(e, t)}
+                        style={{
+                          display: 'block', width: '100%', textAlign: 'left',
+                          padding: '0.5rem 0.75rem', background: 'none',
+                          border: 'none', color: '#fc8181',
+                          cursor: 'pointer', fontSize: '0.85rem'
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(252,129,129,0.15)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
+                      >
+                        🗑️ Eliminar torneo
+                      </button>
+                    </div>
                   </div>
                 )}
               </li>

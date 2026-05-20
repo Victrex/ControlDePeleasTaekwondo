@@ -67,11 +67,26 @@ export class Tournament {
     return this.findById(id);
   }
 
-  // Eliminar torneo (y todas sus peleas en cascada)
+  // Eliminar torneo y todos sus datos en cascada (peleas, llaves, scores, historial, podio)
   static delete(id) {
-    const stmt = db.prepare('DELETE FROM tournaments WHERE id = ?');
-    const result = stmt.run(id);
-    return result.changes > 0;
+    const deleteAll = db.transaction(() => {
+      const tournament = db.prepare('SELECT * FROM tournaments WHERE id = ?').get(id);
+      if (!tournament) return null;
+
+      const fightCount    = db.prepare('SELECT COUNT(*) as c FROM fights WHERE tournament_id = ?').get(id).c;
+      const bracketCount  = db.prepare('SELECT COUNT(*) as c FROM brackets WHERE tournament_id = ?').get(id).c;
+      const scoreCount    = db.prepare(`
+        SELECT COUNT(*) as c FROM fight_scores
+        WHERE fight_id IN (SELECT id FROM fights WHERE tournament_id = ?)
+      `).get(id).c;
+
+      // La FK con ON DELETE CASCADE se encarga del resto; eliminamos el torneo raíz.
+      db.prepare('DELETE FROM tournaments WHERE id = ?').run(id);
+
+      return { tournament, fightCount, bracketCount, scoreCount };
+    });
+
+    return deleteAll();
   }
 
   // Obtener estadísticas del torneo

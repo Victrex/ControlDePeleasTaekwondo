@@ -83,6 +83,7 @@ router.get('/brackets/:bracket_id/matches', bracketController.getMatches);
 router.post('/brackets/match/:match_id/winner', requireAdmin, bracketController.setMatchWinner);
 router.put('/brackets/:bracket_id/competitors/reorder', requireAdmin, bracketController.reorderCompetitors);
 router.delete('/brackets/competitor/:competitor_id', requireAdmin, bracketController.removeCompetitor);
+router.delete('/brackets/:bracket_id', requireAdmin, bracketController.deleteBracket);
 
 // ============================================
 // RUTAS DE SCORING / PUNTUACIÓN

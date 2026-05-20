@@ -1,5 +1,6 @@
 import { Bracket } from '../models/Bracket.js';
 import { FightService } from '../services/fightService.js';
+import { timerService } from '../services/timerService.js';
 import db from '../config/database.js';
 
 export const bracketController = {
@@ -217,6 +218,42 @@ export const bracketController = {
       Bracket.removeCompetitor(parseInt(competitor_id));
       res.json({ success: true });
     } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  // Eliminar llave completa y sus peleas
+  deleteBracket(req, res) {
+    try {
+      const { bracket_id } = req.params;
+      const id = parseInt(bracket_id);
+
+      const bracket = Bracket.findById(id);
+      if (!bracket) {
+        return res.status(404).json({ error: 'Llave no encontrada' });
+      }
+
+      // Detener timers de las peleas de esta llave antes de eliminar
+      const fights = db.prepare('SELECT id FROM fights WHERE bracket_id = ?').all(id);
+      for (const f of fights) {
+        try { timerService.stop(f.id); } catch (_) { /* ignorar */ }
+      }
+
+      const result = Bracket.delete(id);
+      if (!result) {
+        return res.status(404).json({ error: 'Llave no encontrada' });
+      }
+
+      res.json({
+        success: true,
+        message: `Llave "${result.bracket.name}" eliminada correctamente`,
+        deleted: {
+          fights: result.fightCount,
+          competitors: result.competitorCount
+        }
+      });
+    } catch (error) {
+      console.error('Error eliminando llave:', error);
       res.status(500).json({ error: error.message });
     }
   }

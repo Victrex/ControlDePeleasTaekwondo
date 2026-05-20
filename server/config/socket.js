@@ -134,5 +134,11 @@ export const emitEvents = {
   tournamentCompleted: (tournamentId) => {
     const io = getIO();
     io.emit('tournament:completed', tournamentId);
+  },
+
+  // Emitir torneo eliminado
+  tournamentDeleted: (data) => {
+    const io = getIO();
+    io.emit('tournament:deleted', data);
   }
 };

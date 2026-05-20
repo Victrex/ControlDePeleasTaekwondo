@@ -1,6 +1,8 @@
 import { Tournament } from '../models/Tournament.js';
 import { TournamentConfig } from '../models/TournamentConfig.js';
+import { Fight } from '../models/Fight.js';
 import { PodiumService } from '../services/podiumService.js';
+import { timerService } from '../services/timerService.js';
 import { emitEvents } from '../config/socket.js';
 
 export const tournamentController = {
@@ -94,8 +96,37 @@ export const tournamentController = {
   delete(req, res) {
     try {
       const { id } = req.params;
-      const result = Tournament.delete(parseInt(id));
-      res.json({ success: result });
+      const tournamentId = parseInt(id);
+
+      const tournament = Tournament.findById(tournamentId);
+      if (!tournament) {
+        return res.status(404).json({ error: 'Torneo no encontrado' });
+      }
+
+      // Detener todos los timers en memoria de las peleas de este torneo
+      const fights = Fight.findByTournament(tournamentId);
+      for (const fight of fights) {
+        try { timerService.stop(fight.id); } catch (_) { /* ignorar si ya no corre */ }
+      }
+
+      // Eliminación en cascada (FK ON DELETE CASCADE cubre brackets, peleas, scores, etc.)
+      const result = Tournament.delete(tournamentId);
+      if (!result) {
+        return res.status(404).json({ error: 'Torneo no encontrado' });
+      }
+
+      // Notificar a todos los clientes conectados
+      emitEvents.tournamentDeleted({ id: tournamentId, name: result.tournament.name });
+
+      res.json({
+        success: true,
+        message: `Torneo "${result.tournament.name}" eliminado correctamente`,
+        deleted: {
+          fights: result.fightCount,
+          brackets: result.bracketCount,
+          scores: result.scoreCount
+        }
+      });
     } catch (error) {
       console.error('Error eliminando torneo:', error);
       res.status(500).json({ error: error.message });

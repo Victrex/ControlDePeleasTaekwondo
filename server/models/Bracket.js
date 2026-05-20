@@ -23,6 +23,27 @@ export class Bracket {
     return stmt.all(tournament_id);
   }
 
+  // Eliminar llave y todos sus datos en cascada (peleas, competidores, matches)
+  static delete(id) {
+    const deleteAll = db.transaction(() => {
+      const bracket = db.prepare('SELECT * FROM brackets WHERE id = ?').get(id);
+      if (!bracket) return null;
+
+      const fightCount      = db.prepare('SELECT COUNT(*) as c FROM fights WHERE bracket_id = ?').get(id).c;
+      const competitorCount = db.prepare('SELECT COUNT(*) as c FROM bracket_competitors WHERE bracket_id = ?').get(id).c;
+
+      // Eliminar peleas del bracket (FK es ON DELETE SET NULL, hay que hacerlo explícito)
+      db.prepare('DELETE FROM fights WHERE bracket_id = ?').run(id);
+
+      // Eliminar la llave (cascade borra bracket_competitors y bracket_matches)
+      db.prepare('DELETE FROM brackets WHERE id = ?').run(id);
+
+      return { bracket, fightCount, competitorCount };
+    });
+
+    return deleteAll();
+  }
+
   // Agregar competidor a la llave
   static addCompetitor(bracket_id, name, academy, peto_color, seed = null) {
     const stmt = db.prepare(`

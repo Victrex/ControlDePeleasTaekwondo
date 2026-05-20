@@ -76,6 +76,10 @@ class API {
     });
   }
 
+  async deleteTournament(id) {
+    return this.request(`/tournaments/${id}`, { method: 'DELETE' });
+  }
+
   async getPodium(tournamentId) {
     return this.request(`/tournaments/${tournamentId}/podium`);
   }
@@ -237,6 +241,10 @@ class API {
 
   async removeBracketCompetitor(competitorId) {
     return this.request(`/brackets/competitor/${competitorId}`, { method: 'DELETE' });
+  }
+
+  async deleteBracket(bracketId) {
+    return this.request(`/brackets/${bracketId}`, { method: 'DELETE' });
   }
 
   // ============================================
