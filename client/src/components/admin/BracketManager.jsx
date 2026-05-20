@@ -91,6 +91,24 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
     }
   };
 
+  const handleRegenerateBracket = async () => {
+    const realCompetitors = competitors.filter(c => c.name !== 'BYE');
+    if (realCompetitors.length < 2) {
+      alert('Se necesitan al menos 2 competidores reales');
+      return;
+    }
+    const confirmed = window.confirm(
+      `⚠️ REGENERAR BRACKET\n\nSe eliminarán todas las peleas y resultados actuales de esta llave y se generará un nuevo bracket con los ${competitors.length} competidores en el orden actual.\n\n¿Confirmas?`
+    );
+    if (!confirmed) return;
+    await api.reorderBracketCompetitors(selectedBracket.id, competitors.map(c => c.id));
+    await api.generateBracketStructure(selectedBracket.id);
+    loadMatches(selectedBracket.id);
+    if (onFightsCreated) {
+      onFightsCreated();
+    }
+  };
+
   // ─── Drag & Drop handlers ───────────────────────────────────────────
   const handleDragStart = (idx) => {
     dragItem.current = idx;
@@ -559,7 +577,7 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
           <div className="competitors-list-compact">
             <h4>
               👥 Competidores ({competitors.filter(c => c.name !== 'BYE').length})
-              {matches.length === 0 && competitors.length > 0 && (
+              {competitors.length > 0 && (
                 <span className="dnd-hint"> · Arrastra para reordenar</span>
               )}
             </h4>
@@ -569,44 +587,56 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
                   <div
                     key={c.id}
                     className={`dnd-competitor-row ${c.name === 'BYE' ? 'bye-row' : ''} ${draggingIdx === idx ? 'dragging' : ''}`}
-                    draggable={matches.length === 0}
+                    draggable
                     onDragStart={() => handleDragStart(idx)}
                     onDragEnter={() => handleDragEnter(idx)}
                     onDragEnd={handleDragEnd}
                     onDragOver={e => e.preventDefault()}
                   >
-                    {matches.length === 0 && (
-                      <span className="drag-handle" title="Arrastrar para reordenar">⠿</span>
-                    )}
+                    <span className="drag-handle" title="Arrastrar para reordenar">⠿</span>
                     <span className="chip-number">{idx + 1}</span>
                     {c.name === 'BYE'
                       ? <span className="bye-label">BYE <em>(posición libre)</em></span>
-                      : <span className="comp-name">{c.name}{c.academy && <small> ({c.academy})</small>}</span>
+                      : <span className="comp-name">
+                          {c.name}{c.academy && <small> ({c.academy})</small>}
+                          {(() => {
+                            const hasManualByes = competitors.some(x => x.name === 'BYE');
+                            const realCount = competitors.filter(x => x.name !== 'BYE').length;
+                            if (!hasManualByes && realCount % 2 === 1 && idx === 0) {
+                              return <span className="bye-auto-badge" title="Pasa directo a la siguiente ronda">⚡ BYE</span>;
+                            }
+                            return null;
+                          })()}
+                        </span>
                     }
-                    {matches.length === 0 && (
-                      <button
-                        className="btn-remove-comp"
-                        title="Quitar"
-                        onClick={() => handleRemoveCompetitor(c.id)}
-                      >×</button>
-                    )}
+                    <button
+                      className="btn-remove-comp"
+                      title="Quitar"
+                      onClick={() => handleRemoveCompetitor(c.id)}
+                    >×</button>
                   </div>
                 ))}
               </div>
             ) : (
               <p className="no-competitors">No hay competidores agregados</p>
             )}
-            {matches.length === 0 && competitors.length >= 2 && (
+            {competitors.length >= 2 && (
               <div className="bracket-actions">
                 <button onClick={handleAddBye} className="btn-small btn-bye">
                   ➕ Agregar BYE
                 </button>
-                <button onClick={handleGenerateBracket} className="btn-primary btn-generate">
-                  🎯 Generar Bracket Oficial
-                </button>
+                {matches.length === 0 ? (
+                  <button onClick={handleGenerateBracket} className="btn-primary btn-generate">
+                    🎯 Generar Bracket Oficial
+                  </button>
+                ) : (
+                  <button onClick={handleRegenerateBracket} className="btn-primary btn-generate" style={{background:'#d97706'}}>
+                    🔄 Regenerar Bracket
+                  </button>
+                )}
               </div>
             )}
-            {matches.length === 0 && competitors.length === 1 && (
+            {competitors.length === 1 && (
               <div className="bracket-actions">
                 <button onClick={handleAddBye} className="btn-small btn-bye">
                   ➕ Agregar BYE
@@ -900,6 +930,19 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
           flex: 1;
         }
         
+        .bye-auto-badge {
+          display: inline-block;
+          margin-left: 6px;
+          padding: 1px 6px;
+          background: #854d0e;
+          color: #fef08a;
+          border-radius: 4px;
+          font-size: 0.7rem;
+          font-weight: 700;
+          letter-spacing: 0.03em;
+          vertical-align: middle;
+          white-space: nowrap;
+        }
         .comp-name small {
           color: #6366f1;
           font-weight: 400;

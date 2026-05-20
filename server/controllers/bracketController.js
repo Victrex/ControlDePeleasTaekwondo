@@ -47,11 +47,19 @@ export const bracketController = {
     }
   },
 
-  // Generar estructura del bracket
+  // Generar estructura del bracket (idempotente: limpia peleas previas antes de regenerar)
   generateStructure(req, res) {
     try {
       const { bracket_id } = req.params;
       const bracketIdInt = parseInt(bracket_id);
+
+      // Detener timers y eliminar peleas existentes de esta llave antes de regenerar
+      const existingFights = db.prepare('SELECT id FROM fights WHERE bracket_id = ?').all(bracketIdInt);
+      for (const f of existingFights) {
+        try { timerService.stop(f.id); } catch (_) {}
+      }
+      db.prepare('DELETE FROM fights WHERE bracket_id = ?').run(bracketIdInt);
+
       const matches = Bracket.generateBracketStructure(bracketIdInt);
       
       // Obtener el tournament_id del bracket
