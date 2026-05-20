@@ -352,6 +352,58 @@ class API {
       body: JSON.stringify(config)
     });
   }
+
+  // ============================================
+  // ANALÍTICAS / DASHBOARD
+  // ============================================
+
+  async getAnalyticsGlobal(tournamentId = null) {
+    const q = tournamentId ? `?tournament_id=${tournamentId}` : '';
+    return this.request(`/analytics/global${q}`);
+  }
+
+  async getAnalyticsTop(limit = 5, tournamentId = null) {
+    const q = tournamentId ? `&tournament_id=${tournamentId}` : '';
+    return this.request(`/analytics/top?limit=${limit}${q}`);
+  }
+
+  async getAnalyticsAcademies(tournamentId = null) {
+    const q = tournamentId ? `?tournament_id=${tournamentId}` : '';
+    return this.request(`/analytics/academies${q}`);
+  }
+
+  async getAnalyticsCompetitors(tournamentId = null) {
+    const q = tournamentId ? `?tournament_id=${tournamentId}` : '';
+    return this.request(`/analytics/competitors${q}`);
+  }
+
+  async getAnalyticsTournaments(tournamentId = null) {
+    const q = tournamentId ? `?tournament_id=${tournamentId}` : '';
+    return this.request(`/analytics/tournaments${q}`);
+  }
+
+  async getAnalyticsBrackets(tournamentId = null) {
+    const q = tournamentId ? `?tournament_id=${tournamentId}` : '';
+    return this.request(`/analytics/brackets${q}`);
+  }
+
+  async getAnalyticsCompetitorDetail(name) {
+    return this.request(`/analytics/competitor/${encodeURIComponent(name)}`);
+  }
+
+  async getAnalyticsAcademyDetail(name) {
+    return this.request(`/analytics/academy/${encodeURIComponent(name)}`);
+  }
+
+  async getAnalyticsScoring(tournamentId = null) {
+    const q = tournamentId ? `?tournament_id=${tournamentId}` : '';
+    return this.request(`/analytics/scoring${q}`);
+  }
+
+  async getAnalyticsScoringCompetitors(tournamentId = null) {
+    const q = tournamentId ? `?tournament_id=${tournamentId}` : '';
+    return this.request(`/analytics/scoring/competitors${q}`);
+  }
 }
 
 export default new API();

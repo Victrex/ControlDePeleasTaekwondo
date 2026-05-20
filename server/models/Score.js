@@ -100,6 +100,7 @@ export class Score {
   }
 
   static cleanExpiredInputs(fightId, beforeTimestamp) {
-    db.prepare('DELETE FROM judge_inputs WHERE fight_id = ? AND processed = 0 AND timestamp < ?').run(fightId, beforeTimestamp);
+    // Mark as processed=2 (expired/missed) instead of deleting — preserves data for analytics
+    db.prepare('UPDATE judge_inputs SET processed = 2 WHERE fight_id = ? AND processed = 0 AND timestamp < ?').run(fightId, beforeTimestamp);
   }
 }

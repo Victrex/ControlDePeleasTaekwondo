@@ -5,6 +5,7 @@ import { tournamentController } from '../controllers/tournamentController.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { bracketController } from '../controllers/bracketController.js';
 import { scoringController } from '../controllers/scoringController.js';
+import { analyticsController } from '../controllers/analyticsController.js';
 
 const router = express.Router();
 
@@ -121,5 +122,19 @@ router.post('/scoring/:fightId/clear-current-score', requireAdmin, scoringContro
 // Round management (admin)
 router.post('/scoring/:fightId/end-round', requireAdmin, scoringController.endRound);
 router.post('/scoring/:fightId/round-winner', requireAdmin, scoringController.setRoundWinner);
+
+// ============================================
+// RUTAS DE ANALÍTICAS / DASHBOARD
+// ============================================
+router.get('/analytics/global',           analyticsController.getGlobalMetrics);
+router.get('/analytics/top',              analyticsController.getTopStats);
+router.get('/analytics/academies',        analyticsController.getAcademyRanking);
+router.get('/analytics/competitors',      analyticsController.getCompetitorRanking);
+router.get('/analytics/tournaments',      analyticsController.getTournamentMetrics);
+router.get('/analytics/brackets',              analyticsController.getBracketMetrics);
+router.get('/analytics/competitor/:name',      analyticsController.getCompetitorDetail);
+router.get('/analytics/academy/:name',         analyticsController.getAcademyDetail);
+router.get('/analytics/scoring',               analyticsController.getScoringMetrics);
+router.get('/analytics/scoring/competitors',   analyticsController.getScoringCompetitors);
 
 export default router;

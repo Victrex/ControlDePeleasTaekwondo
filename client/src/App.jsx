@@ -6,6 +6,7 @@ import Login from './components/shared/Login';
 import Dashboard from './components/admin/Dashboard';
 import Awards from './components/admin/Awards';
 import ScoringControl from './components/admin/ScoringControl';
+import Analytics from './components/admin/Analytics';
 import PublicDisplay from './components/public/PublicDisplay';
 import Scoreboard from './components/scoreboard/Scoreboard';
 import JudgePanel from './components/judge/JudgePanel';
@@ -60,6 +61,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Awards />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/analytics" 
+            element={
+              <ProtectedRoute>
+                <Analytics />
               </ProtectedRoute>
             } 
           />

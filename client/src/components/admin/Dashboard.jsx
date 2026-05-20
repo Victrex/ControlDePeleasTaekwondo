@@ -324,6 +324,9 @@ export default function Dashboard() {
       <header className="dashboard-header">
         <h1>🥋 Panel de Administración</h1>
         <div className="header-info">
+          <button onClick={() => navigate('/admin/analytics')} className="btn-awards" style={{ background: 'rgba(99,102,241,.2)', borderColor: '#6366f1', color: '#818cf8' }}>
+            📊 Dashboard
+          </button>
           <button onClick={() => navigate('/admin/awards')} className="btn-awards">
             🏆 Premiación
           </button>
