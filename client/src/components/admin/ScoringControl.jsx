@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useSocket } from '../../contexts/SocketContext';
+import { Monitor, Scale, Trophy, Circle, RefreshCw, Gamepad2, Crown, AlertTriangle, Target, RotateCcw, Sparkles, Play, Pause, Timer, X, SkipForward, Eraser, Zap, Activity, Check } from 'lucide-react';
 import api from '../../utils/api';
 import './ScoringControl.css';
 
@@ -525,8 +526,8 @@ export default function ScoringControl() {
         <Link to="/admin" className="sc-back">← Admin</Link>
         <h2>Control de Mesa — Combate #{fight.fight_number}</h2>
         <div className="sc-links">
-          <Link to={`/scoreboard/${fightId}`} target="_blank" className="sc-link">📺 Scoreboard</Link>
-          <Link to={`/judge/${fightId}?judgeId=1`} target="_blank" className="sc-link">⚖ Juez externo</Link>
+          <Link to={`/scoreboard/${fightId}`} target="_blank" className="sc-link"><Monitor size={13} /> Scoreboard</Link>
+          <Link to={`/judge/${fightId}?judgeId=1`} target="_blank" className="sc-link"><Scale size={13} /> Juez externo</Link>
         </div>
       </div>
 
@@ -534,9 +535,9 @@ export default function ScoringControl() {
       {fight.status === 'completed' && fight.final_winner && (
         <div style={{ background: '#2d6a4f', color: 'white', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', borderBottom: '3px solid #1b4332' }}>
           <div style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>
-            🏆 Pelea finalizada — Ganador:{' '}
+            <Trophy size={16} /> Pelea finalizada — Ganador:{' '}
             <span style={{ textTransform: 'uppercase' }}>
-              {fight.final_winner === 'red' ? '🔴 Rojo' : '🔵 Azul'}
+              {fight.final_winner === 'red' ? <><Circle size={10} fill="#ef4444" color="#ef4444" /> Rojo</> : <><Circle size={10} fill="#3b82f6" color="#3b82f6" /> Azul</>}
             </span>
             {fight.victory_type && <span style={{ marginLeft: '0.75rem', fontSize: '0.9rem', opacity: 0.85 }}>({fight.victory_type})</span>}
           </div>
@@ -544,7 +545,7 @@ export default function ScoringControl() {
             onClick={handleRepeatFight}
             style={{ background: '#e67e22', color: 'white', border: 'none', borderRadius: '6px', padding: '0.4rem 1rem', cursor: 'pointer', fontWeight: 'bold', whiteSpace: 'nowrap' }}
           >
-            🔄 Repetir pelea
+            <RefreshCw size={13} /> Repetir pelea
           </button>
         </div>
       )}
@@ -552,16 +553,16 @@ export default function ScoringControl() {
       {/* Judges / Gamepads panel */}
       <div className="sc-judges-panel">
         <div className="sc-judges-header">
-          <h3>⚖ Jueces (Mandos)</h3>
+          <h3><Scale size={15} /> Jueces (Mandos)</h3>
           <div className={`sc-judges-status ${numAssignedJudges >= requiredJudges ? 'sc-judges-ready' : 'sc-judges-warning'}`}>
             {numAssignedJudges} / {requiredJudges} asignados
-            {numAssignedJudges >= requiredJudges && ' ✓'}
+            {numAssignedJudges >= requiredJudges && <Check size={12} />}
           </div>
         </div>
 
         {detectedGamepads.length === 0 ? (
           <div className="sc-judges-empty">
-            <span>🎮</span> No se detectan mandos. Conecta un mando USB/Bluetooth y presiona un botón.
+            <Gamepad2 size={16} /> No se detectan mandos. Conecta un mando USB/Bluetooth y presiona un botón.
           </div>
         ) : (
           <div className="sc-gamepads-list">
@@ -572,7 +573,7 @@ export default function ScoringControl() {
               return (
                 <div key={gp.index} className={`sc-gamepad-item ${judgeId ? 'sc-gp-assigned' : ''}`}>
                   <div className="sc-gp-info">
-                    <span className="sc-gp-icon">🎮</span>
+                    <span className="sc-gp-icon"><Gamepad2 size={18} /></span>
                     <div className="sc-gp-details">
                       <span className="sc-gp-name">{gp.name}</span>
                       <span className="sc-gp-idx">Slot #{gp.index}</span>
@@ -581,7 +582,7 @@ export default function ScoringControl() {
                   <div className="sc-gp-status">
                     {judgeId && lastInput && isRecent && (
                       <span className={`sc-gp-last-input sc-gp-input-${lastInput.team}`}>
-                        {lastInput.team === 'blue' ? '🔵' : '🔴'} {ACTION_LABELS[lastInput.action]}
+                        {lastInput.team === 'blue' ? <Circle size={8} fill="#3b82f6" color="#3b82f6" /> : <Circle size={8} fill="#ef4444" color="#ef4444" />} {ACTION_LABELS[lastInput.action]}
                       </span>
                     )}
                   </div>
@@ -589,14 +590,14 @@ export default function ScoringControl() {
                     className={`sc-gp-assign-btn ${judgeId ? 'sc-gp-unassign' : 'sc-gp-assign'}`}
                     onClick={() => toggleJudgeAssignment(gp.index)}
                   >
-                    {judgeId ? `Juez ${judgeId} ✕` : 'Asignar'}
+                    {judgeId ? `Juez ${judgeId} ` : 'Asignar'}{judgeId && <X size={11} />}
                   </button>
                   <button
                     className={`sc-gp-main-btn ${mainGamepad === gp.index ? 'sc-gp-main-active' : ''}`}
                     onClick={() => setMainGamepad(prev => prev === gp.index ? null : gp.index)}
                     title="Mando principal (Options = Shi-jak/Galyo)"
                   >
-                    {mainGamepad === gp.index ? '👑 Main' : '🎮 Main'}
+                    {mainGamepad === gp.index ? <><Crown size={12} /> Main</> : <><Gamepad2 size={12} /> Main</>}
                   </button>
                 </div>
               );
@@ -605,7 +606,7 @@ export default function ScoringControl() {
         )}
         {numAssignedJudges > 0 && numAssignedJudges < requiredJudges && (
           <div className="sc-judges-warn-msg">
-            ⚠ Se necesitan {requiredJudges} jueces para consenso de mayoría. Actualmente {numAssignedJudges} asignados.
+            <AlertTriangle size={13} /> Se necesitan {requiredJudges} jueces para consenso de mayoría. Actualmente {numAssignedJudges} asignados.
           </div>
         )}
       </div>
@@ -679,20 +680,20 @@ export default function ScoringControl() {
         <h3>Puntuación Manual</h3>
         <div className="sc-manual-grid">
           <div className="sc-manual-col sc-manual-blue">
-            <span className="sc-manual-team-label">🔵 Azul</span>
-            <button className="sc-ms-btn" onClick={() => handleAdminAddScore('blue', 'punch_body')}>👊 Puño</button>
-            <button className="sc-ms-btn" onClick={() => handleAdminAddScore('blue', 'kick_body')}>🦶 Peto</button>
-            <button className="sc-ms-btn" onClick={() => handleAdminAddScore('blue', 'kick_head')}>🎯 Cabeza</button>
-            <button className="sc-ms-btn" onClick={() => handleAdminAddScore('blue', 'spinning_kick_body')}>🌀 Giro P</button>
-            <button className="sc-ms-btn" onClick={() => handleAdminAddScore('blue', 'spinning_kick_head')}>💫 Giro C</button>
+            <span className="sc-manual-team-label"><Circle size={10} fill="#3b82f6" color="#3b82f6" /> Azul</span>
+            <button className="sc-ms-btn" onClick={() => handleAdminAddScore('blue', 'punch_body')}><Zap size={13} /> Puño</button>
+            <button className="sc-ms-btn" onClick={() => handleAdminAddScore('blue', 'kick_body')}><Activity size={13} /> Peto</button>
+            <button className="sc-ms-btn" onClick={() => handleAdminAddScore('blue', 'kick_head')}><Target size={13} /> Cabeza</button>
+            <button className="sc-ms-btn" onClick={() => handleAdminAddScore('blue', 'spinning_kick_body')}><RotateCcw size={13} /> Giro P</button>
+            <button className="sc-ms-btn" onClick={() => handleAdminAddScore('blue', 'spinning_kick_head')}><Sparkles size={13} /> Giro C</button>
           </div>
           <div className="sc-manual-col sc-manual-red">
-            <span className="sc-manual-team-label">🔴 Rojo</span>
-            <button className="sc-ms-btn" onClick={() => handleAdminAddScore('red', 'punch_body')}>👊 Puño</button>
-            <button className="sc-ms-btn" onClick={() => handleAdminAddScore('red', 'kick_body')}>🦶 Peto</button>
-            <button className="sc-ms-btn" onClick={() => handleAdminAddScore('red', 'kick_head')}>🎯 Cabeza</button>
-            <button className="sc-ms-btn" onClick={() => handleAdminAddScore('red', 'spinning_kick_body')}>🌀 Giro P</button>
-            <button className="sc-ms-btn" onClick={() => handleAdminAddScore('red', 'spinning_kick_head')}>💫 Giro C</button>
+            <span className="sc-manual-team-label"><Circle size={10} fill="#ef4444" color="#ef4444" /> Rojo</span>
+            <button className="sc-ms-btn" onClick={() => handleAdminAddScore('red', 'punch_body')}><Zap size={13} /> Puño</button>
+            <button className="sc-ms-btn" onClick={() => handleAdminAddScore('red', 'kick_body')}><Activity size={13} /> Peto</button>
+            <button className="sc-ms-btn" onClick={() => handleAdminAddScore('red', 'kick_head')}><Target size={13} /> Cabeza</button>
+            <button className="sc-ms-btn" onClick={() => handleAdminAddScore('red', 'spinning_kick_body')}><RotateCcw size={13} /> Giro P</button>
+            <button className="sc-ms-btn" onClick={() => handleAdminAddScore('red', 'spinning_kick_head')}><Sparkles size={13} /> Giro C</button>
           </div>
         </div>
       </div>
@@ -701,10 +702,10 @@ export default function ScoringControl() {
       <div className="sc-timer-controls">
         <div className="sc-timer-row">
           <button className="sc-btn sc-btn-start" onClick={handleStartTimer} disabled={timer.running}>
-            ▶ Shi-jak
+            <Play size={13} /> Shi-jak
           </button>
           <button className="sc-btn sc-btn-stop" onClick={handleStopTimer} disabled={!timer.running}>
-            ⏸ Galyo
+            <Pause size={13} /> Galyo
           </button>
           <button className="sc-btn sc-btn-reset" onClick={handleResetTimer}>
             ↺ Reset
@@ -717,7 +718,7 @@ export default function ScoringControl() {
             onClick={handleKyeShie}
             title="Kye-shi: tiempo de descuento (1 min) por lesión"
           >
-            {kyeShieActive ? '✕ Kye-shi' : '⏱ Kye-shi'}
+            {kyeShieActive ? <><X size={12} /> Kye-shi</> : <><Timer size={13} /> Kye-shi</>}
           </button>
           <button
             className="sc-btn sc-btn-clear"
@@ -725,14 +726,14 @@ export default function ScoringControl() {
             disabled={timer.running}
             title="Limpia score y gam-jeom del round actual"
           >
-            🧹 Limpiar Score Actual
+            <Eraser size={13} /> Limpiar Score Actual
           </button>
           <button
             className="sc-btn sc-btn-next-fight"
             onClick={openNextFightModal}
             title="Seleccionar siguiente pelea para esta pista"
           >
-            ▶▶ Siguiente Pelea
+            <SkipForward size={13} /> Siguiente Pelea
           </button>
         </div>
         <div className="sc-timer-row">
@@ -815,7 +816,7 @@ export default function ScoringControl() {
               <tbody>
                 {rd.events.map(ev => (
                   <tr key={ev.id} className={`sc-bd-row-${ev.team}`}>
-                    <td>{ev.team === 'red' ? '🔴' : '🔵'}</td>
+                    <td>{ev.team === 'red' ? <Circle size={9} fill="#ef4444" color="#ef4444" /> : <Circle size={9} fill="#3b82f6" color="#3b82f6" />}</td>
                     <td>{ACTION_LABELS[ev.action] || ev.action}</td>
                     <td>{ev.points}</td>
                     <td>
@@ -824,7 +825,7 @@ export default function ScoringControl() {
                         onClick={() => handleDeleteScore(ev.id)}
                         disabled={timer.running}
                         title="Eliminar"
-                      >✕</button>
+                      ><X size={11} /></button>
                     </td>
                   </tr>
                 ))}
@@ -846,7 +847,7 @@ export default function ScoringControl() {
           <div className="sb-modal" onClick={(e) => e.stopPropagation()}>
             <div className="sb-modal-header">
               <h2>Siguiente Pelea — Pista {fight.pista || 1}</h2>
-              <button className="sb-modal-close" onClick={() => setShowNextFightModal(false)}>✕</button>
+              <button className="sb-modal-close" onClick={() => setShowNextFightModal(false)}><X size={14} /></button>
             </div>
             <div className="sb-modal-filter">
               <label className="sb-modal-filter-label">

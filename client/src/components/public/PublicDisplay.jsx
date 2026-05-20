@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useSocket } from '../../contexts/SocketContext';
+import { Swords, Trophy, Circle, ClipboardList, CheckCircle2 } from 'lucide-react';
 import api from '../../utils/api';
 
 export default function PublicDisplay() {
@@ -306,7 +307,7 @@ export default function PublicDisplay() {
       {fightWinner && (
         <div className={`winner-overlay ${fightWinner.color}`}>
           <div className="winner-content">
-            <div className="winner-trophy">🏆</div>
+            <div className="winner-trophy"><Trophy size={48} /></div>
             <div className="winner-label">¡GANADOR!</div>
             <div className="winner-name">{fightWinner.name}</div>
             <div className="winner-corner">Esquina {fightWinner.color === 'red' ? 'ROJA' : 'AZUL'}</div>
@@ -319,7 +320,7 @@ export default function PublicDisplay() {
       )}
 
       <header className="public-header">
-        <h1>🥋 Torneo de Taekwondo</h1>
+        <h1><Swords size={22} /> Torneo de Taekwondo</h1>
         {selectedTournament && (
           <div className="tournament-info">
             <h2>{selectedTournament.name}</h2>
@@ -369,14 +370,14 @@ export default function PublicDisplay() {
           </div>
         )}
         <div className={`connection-indicator ${connected ? 'connected' : ''}`}>
-          {connected ? '🟢 En vivo' : '🔴 Sin conexión'}
+          {connected ? <><Circle size={10} fill="#22c55e" color="#22c55e" /> En vivo</> : <><Circle size={10} fill="#ef4444" color="#ef4444" /> Sin conexión</>}
         </div>
       </header>
 
       <main className="public-main">
         {currentFight ? (
           <div className="current-fight-display">
-            <h3>⚔️ PELEA EN CURSO {(selectedTournament?.num_pistas || 1) > 1 ? `- Pista ${currentFight.pista || 1}` : ''}</h3>
+            <h3><Swords size={16} /> PELEA EN CURSO {(selectedTournament?.num_pistas || 1) > 1 ? `- Pista ${currentFight.pista || 1}` : ''}</h3>
             <div className="fighters">
               <div className="fighter red">
                 <br />
@@ -425,13 +426,13 @@ export default function PublicDisplay() {
               className={`fights-tab ${activeTab === 'pending' ? 'active' : ''}`}
               onClick={() => setActiveTab('pending')}
             >
-              📋 Próximas ({nextFights.length})
+              <ClipboardList size={14} /> Próximas ({nextFights.length})
             </button>
             <button 
               className={`fights-tab ${activeTab === 'completed' ? 'active' : ''}`}
               onClick={() => setActiveTab('completed')}
             >
-              ✅ Finalizadas ({completedFights.length})
+              <CheckCircle2 size={14} /> Finalizadas ({completedFights.length})
             </button>
           </div>
 
@@ -493,12 +494,12 @@ export default function PublicDisplay() {
                         <div className="fight-competitors">
                           <div className={`fighter-info red-name ${fight.final_winner === 'red' ? 'winner' : 'loser'}`}>
                             <span className="name">{fight.competitor_red}</span>
-                            {fight.final_winner === 'red' && <span className="winner-icon">🏆</span>}
+                            {fight.final_winner === 'red' && <span className="winner-icon"><Trophy size={14} /></span>}
                           </div>
                           <span className="vs">vs</span>
                           <div className={`fighter-info blue-name ${fight.final_winner === 'blue' ? 'winner' : 'loser'}`}>
                             <span className="name">{fight.competitor_blue}</span>
-                            {fight.final_winner === 'blue' && <span className="winner-icon">🏆</span>}
+                            {fight.final_winner === 'blue' && <span className="winner-icon"><Trophy size={14} /></span>}
                           </div>
                         </div>
                       </li>

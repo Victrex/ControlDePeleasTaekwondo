@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useSocket } from "../../contexts/SocketContext";
+import { RotateCcw, Sparkles, Zap, Pause, SkipForward } from 'lucide-react';
 import api from "../../utils/api";
 import "./Scoreboard.css";
 import peto from "../../../public/SVG/peto_white.svg";
@@ -20,8 +21,8 @@ const ACTION_ICONS = {
   punch_body: <img src={punch} alt="Puño" />,
   kick_body: <img src={peto} alt="Peto" />,
   kick_head: <img src={casco} alt="Casco" />,
-  spinning_kick_body: "🌀",
-  spinning_kick_head: "💫",
+  spinning_kick_body: <RotateCcw size={14} />,
+  spinning_kick_head: <Sparkles size={14} />,
 };
 
 function formatTime(ms) {
@@ -515,7 +516,7 @@ export default function Scoreboard() {
               className={`sb-judge-vote ${judgeVote.awarded ? "sb-vote-awarded" : "sb-vote-pending"}`}
             >
               <span className="sb-vote-icon">
-                {ACTION_ICONS[judgeVote.action] || "⚡"}
+                {ACTION_ICONS[judgeVote.action] || <Zap size={14} />}
               </span>
               {judgeVote.awarded ? (
                 <span className="sb-vote-plus">+</span>
@@ -596,7 +597,7 @@ export default function Scoreboard() {
               className={`sb-judge-vote ${judgeVote.awarded ? "sb-vote-awarded" : "sb-vote-pending"}`}
             >
               <span className="sb-vote-icon">
-                {ACTION_ICONS[judgeVote.action] || "⚡"}
+                {ACTION_ICONS[judgeVote.action] || <Zap size={14} />}
               </span>
               {judgeVote.awarded ? (
                 <span className="sb-vote-plus">+</span>
@@ -644,9 +645,9 @@ export default function Scoreboard() {
       {/* Footer */}
       <div className="scoreboard-footer" style={{ zIndex: 9000 }}>
         <span>Pista {fight.pista || 1}</span>
-        <span>{timer.running ? "● EN VIVO" : "⏸ PAUSADO"}</span>
+        <span>{timer.running ? "● EN VIVO" : <><Pause size={11} /> PAUSADO</>}</span>
         <button className="sb-next-fight-btn" onClick={goToCurrentFightOnPista}>
-          ▶▶ Ir a pelea actual
+          <SkipForward size={14} /> Ir a pelea actual
         </button>
       </div>
     </div>

@@ -4,7 +4,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useSocket } from '../../contexts/SocketContext';
 import api from '../../utils/api';
 import BracketManager from './BracketManager';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Swords, BarChart2, Trophy, Circle, User, Settings, Link2, Monitor, Play, Check, RefreshCw } from 'lucide-react';
 
 export default function Dashboard() {
   const { user, logout } = useAuth();
@@ -352,18 +352,18 @@ export default function Dashboard() {
   return (
     <div className="dashboard">
       <header className="dashboard-header">
-        <h1>🥋 Panel de Administración</h1>
+        <h1><Swords size={22} /> Panel de Administración</h1>
         <div className="header-info">
           <button onClick={() => navigate('/admin/analytics')} className="btn-awards" style={{ background: 'rgba(99,102,241,.2)', borderColor: '#6366f1', color: '#818cf8' }}>
-            📊 Dashboard
+            <BarChart2 size={14} /> Dashboard
           </button>
           <button onClick={() => navigate('/admin/awards')} className="btn-awards">
-            🏆 Premiación
+            <Trophy size={14} /> Premiación
           </button>
           <span className={`connection-status ${connected ? 'connected' : 'disconnected'}`}>
-            {connected ? '🟢 Conectado' : '🔴 Desconectado'}
+            {connected ? <><Circle size={9} fill="#22c55e" color="#22c55e" /> Conectado</> : <><Circle size={9} fill="#ef4444" color="#ef4444" /> Desconectado</>}
           </span>
-          <span className="user-info">👤 {user?.username}</span>
+          <span className="user-info"><User size={14} /> {user?.username}</span>
           <button onClick={handleLogout} className="btn-logout">Cerrar Sesión</button>
         </div>
       </header>
@@ -404,7 +404,7 @@ export default function Dashboard() {
                     }}
                   >
                     <div style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem', color: '#a0aec0', borderBottom: '1px solid #4a5568' }}>Cambiar estado</div>
-                    {[['active', '🟢 Activo'], ['completed', '✅ Completado'], ['cancelled', '❌ Cancelado']].map(([status, label]) => (
+                    {[['active', 'Activo'], ['completed', 'Completado'], ['cancelled', 'Cancelado']].map(([status, label]) => (
                       <button
                         key={status}
                         onClick={(e) => handleChangeTournamentStatus(e, t, status)}
@@ -433,7 +433,7 @@ export default function Dashboard() {
                         onMouseEnter={e => { e.currentTarget.style.background = 'rgba(252,129,129,0.15)'; }}
                         onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
                       >
-                        🗑️ Eliminar torneo
+                        <Trash2 size={13} /> Eliminar torneo
                       </button>
                     </div>
                   </div>
@@ -486,7 +486,7 @@ export default function Dashboard() {
                   className="btn-primary"
                   style={{ marginLeft: '0.5rem', background: '#805ad5' }}
                 >
-                  ⚙ Config Scoring
+                  <Settings size={14} /> Config Scoring
                 </button>
                 <button
                   onClick={() => {
@@ -497,7 +497,7 @@ export default function Dashboard() {
                   style={{ marginLeft: '0.5rem', background: '#2980b9' }}
                   title="Copiar enlace público del torneo"
                 >
-                  🔗 Enlace Público
+                  <Link2 size={14} /> Enlace Público
                 </button>
                 <a
                   href={`/public/${selectedTournament.id}`}
@@ -507,7 +507,7 @@ export default function Dashboard() {
                   style={{ marginLeft: '0.5rem', background: '#27ae60', color: 'white', textDecoration: 'none', display: 'inline-block' }}
                   title="Abrir pantalla pública del torneo en nueva pestaña"
                 >
-                  📺 Ver Público
+                  <Monitor size={14} /> Ver Público
                 </a>
                 {/* Bracket Manager Integration */}
                 {/* <BracketManager tournamentId={selectedTournament.id} /> */}
@@ -545,7 +545,7 @@ export default function Dashboard() {
 
                 {currentFight ? (
                 <div className="current-fight-panel">
-                  <h3>🔥 Pelea Actual — Pista {currentFight.pista || 1}</h3>
+                  <h3>Pelea Actual — Pista {currentFight.pista || 1}</h3>
                   <div className="fight-display">
                     <div className="competitor red">
                       <span className="corner">ROJO</span>
@@ -618,12 +618,12 @@ export default function Dashboard() {
                     onClick={() => handleCompleteFight(currentFight.id)}
                     className="btn-complete"
                   >
-                    ✓ Completar Pelea
+                    <Check size={14} /> Completar Pelea
                   </button>
                 </div>
                 ) : (
                   <div className="current-fight-panel" style={{opacity: 0.6, textAlign: 'center'}}>
-                    <h3>🔥 Pista {selectedAdminPista} — Sin pelea en curso</h3>
+                    <h3>Pista {selectedAdminPista} — Sin pelea en curso</h3>
                     <p>Inicia una pelea de la pista {selectedAdminPista} desde la lista de abajo.</p>
                   </div>
                 )}
@@ -680,7 +680,7 @@ export default function Dashboard() {
                       <tr key={fight.id} className={fight.status}>
                         <td>
                           <div className="order-controls">
-                            <span className="fight-order">{fight.status === 'current' ? '▶' : displayOrder}</span>
+                            <span className="fight-order">{fight.status === 'current' ? <Play size={11} /> : displayOrder}</span>
                             {fight.status === 'pending' && (
                               <div className="move-buttons">
                                 <button 
@@ -729,8 +729,8 @@ export default function Dashboard() {
                           </span>
                         </td>
                         <td>
-                          {fight.final_winner === 'red' && <span className="winner red">🏆 Rojo</span>}
-                          {fight.final_winner === 'blue' && <span className="winner blue">🏆 Azul</span>}
+                          {fight.final_winner === 'red' && <span className="winner red"><Trophy size={12} /> Rojo</span>}
+                          {fight.final_winner === 'blue' && <span className="winner blue"><Trophy size={12} /> Azul</span>}
                         </td>
                         <td>
                           {fight.status === 'pending' && (
@@ -747,7 +747,7 @@ export default function Dashboard() {
                               className="btn-small"
                               style={{ marginLeft: '0.5rem', textDecoration: 'none', display: 'inline-block', background: '#805ad5', color: 'white', padding: '0.2rem 0.6rem', borderRadius: '4px', fontSize: '0.8rem' }}
                             >
-                              🥋 Scoring
+                              <Swords size={12} /> Scoring
                             </Link>
                           )}
                           {fight.status === 'completed' && fight.final_winner && (
@@ -757,7 +757,7 @@ export default function Dashboard() {
                               style={{ background: '#e67e22', color: 'white' }}
                               title="Resetear la pelea y ponerla en curso nuevamente"
                             >
-                              🔄 Repetir
+                              <RefreshCw size={12} /> Repetir
                             </button>
                           )}
                           <button 
@@ -955,7 +955,7 @@ export default function Dashboard() {
       {showScoringConfig && scoringConfig && (
         <div className="modal-overlay">
           <div className="modal" style={{maxWidth: '600px'}}>
-            <h3>⚙ Configuración de Puntuación</h3>
+            <h3><Settings size={16} /> Configuración de Puntuación</h3>
             <form onSubmit={async (e) => {
               e.preventDefault();
               try {

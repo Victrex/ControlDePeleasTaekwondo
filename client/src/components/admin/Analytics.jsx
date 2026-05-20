@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import { Trophy, Medal, Award, Home, Building2, Swords, Key, Zap, BarChart2, CheckCircle2, XCircle, Flag, Clock, Circle, RefreshCw, Lightbulb, Target, RotateCcw, Sparkles, AlertTriangle, Activity, ClipboardList, Vote, X, Dumbbell } from 'lucide-react';
 import api from '../../utils/api';
 import './Analytics.css';
 
@@ -31,9 +32,9 @@ function WinBar({ wins, total }) {
 }
 
 function RankBadge({ rank }) {
-  if (rank === 1) return <span className="badge badge--gold">🥇 1°</span>;
-  if (rank === 2) return <span className="badge badge--silver">🥈 2°</span>;
-  if (rank === 3) return <span className="badge badge--bronze">🥉 3°</span>;
+  if (rank === 1) return <span className="badge badge--gold"><Medal size={13} color="#f59e0b" /> 1°</span>;
+  if (rank === 2) return <span className="badge badge--silver"><Medal size={13} color="#9ca3af" /> 2°</span>;
+  if (rank === 3) return <span className="badge badge--bronze"><Medal size={13} color="#b45309" /> 3°</span>;
   return <span className="badge badge--plain">#{rank}</span>;
 }
 
@@ -50,7 +51,7 @@ function TabBar({ tabs, active, onChange }) {
           className={`an-tab${active === t.id ? ' an-tab--active' : ''}`}
           onClick={() => onChange(t.id)}
         >
-          {t.label}
+          {t.icon}{' '}{t.label}
         </button>
       ))}
     </div>
@@ -62,12 +63,12 @@ function TabBar({ tabs, active, onChange }) {
 // ─────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: 'overview',    label: '🏠 Resumen' },
-  { id: 'academies',   label: '🏫 Escuelas' },
-  { id: 'competitors', label: '🥋 Competidores' },
-  { id: 'tournaments', label: '🏆 Torneos' },
-  { id: 'brackets',    label: '🔑 Llaves' },
-  { id: 'scoring',     label: '⚡ Scoring' },
+  { id: 'overview',    label: 'Resumen',      icon: <Home size={15} /> },
+  { id: 'academies',   label: 'Escuelas',     icon: <Building2 size={15} /> },
+  { id: 'competitors', label: 'Competidores', icon: <Swords size={15} /> },
+  { id: 'tournaments', label: 'Torneos',      icon: <Trophy size={15} /> },
+  { id: 'brackets',    label: 'Llaves',       icon: <Key size={15} /> },
+  { id: 'scoring',     label: 'Scoring',      icon: <Zap size={15} /> },
 ];
 
 export default function Analytics() {
@@ -208,7 +209,7 @@ export default function Analytics() {
     return (
       <div className="an-overview">
         {/* Global KPIs */}
-        <SectionTitle>📊 Métricas Globales</SectionTitle>
+        <SectionTitle><BarChart2 size={18} /> Métricas Globales</SectionTitle>
         {loading.global ? (
           <div className="an-loading">Cargando métricas…</div>
         ) : error.global ? (
@@ -216,16 +217,16 @@ export default function Analytics() {
         ) : g ? (
           <>
             <div className="stat-grid">
-              <StatCard label="Torneos totales"    value={g.total_tournaments}    icon="🏆" color="purple" />
-              <StatCard label="Torneos activos"    value={g.active_tournaments}   icon="🟢" color="green"  />
-              <StatCard label="Torneos completados" value={g.completed_tournaments} icon="✅" color="teal" />
-              <StatCard label="Peleas totales"     value={g.total_fights}         icon="⚔️" color="blue"  />
-              <StatCard label="Peleas completadas" value={g.completed_fights}     icon="🏁" color="blue"  sub={`${g.completion_rate}% completitud`} />
-              <StatCard label="Peleas pendientes"  value={g.pending_fights}       icon="⏳" color="orange" />
-              <StatCard label="Competidores únicos" value={g.distinct_competitors} icon="🥋" color="red"  />
-              <StatCard label="Escuelas únicas"    value={g.distinct_academies}   icon="🏫" color="yellow"/>
-              <StatCard label="Llaves totales"     value={g.total_brackets}       icon="🔑" color="indigo"/>
-              <StatCard label="Podios generados"   value={g.total_podiums}        icon="🥇" color="gold"  />
+              <StatCard label="Torneos totales"    value={g.total_tournaments}    icon={<Trophy size={16} />} color="purple" />
+              <StatCard label="Torneos activos"    value={g.active_tournaments}   icon={<Circle size={12} fill="#22c55e" color="#22c55e" />} color="green"  />
+              <StatCard label="Torneos completados" value={g.completed_tournaments} icon={<CheckCircle2 size={16} />} color="teal" />
+              <StatCard label="Peleas totales"     value={g.total_fights}         icon={<Swords size={16} />} color="blue"  />
+              <StatCard label="Peleas completadas" value={g.completed_fights}     icon={<Flag size={16} />} color="blue"  sub={`${g.completion_rate}% completitud`} />
+              <StatCard label="Peleas pendientes"  value={g.pending_fights}       icon={<Clock size={16} />} color="orange" />
+              <StatCard label="Competidores únicos" value={g.distinct_competitors} icon={<Swords size={16} />} color="red"  />
+              <StatCard label="Escuelas únicas"    value={g.distinct_academies}   icon={<Building2 size={16} />} color="yellow"/>
+              <StatCard label="Llaves totales"     value={g.total_brackets}       icon={<Key size={16} />} color="indigo"/>
+              <StatCard label="Podios generados"   value={g.total_podiums}        icon={<Medal size={16} />} color="gold"  />
             </div>
 
             {/* Victory types */}
@@ -281,7 +282,7 @@ export default function Analytics() {
           <div className="top-grid">
             {/* Top academias */}
             <div className="an-card">
-              <h3 className="an-card__title">🏅 Top Escuelas por Victorias</h3>
+              <h3 className="an-card__title"><Award size={15} /> Top Escuelas por Victorias</h3>
               {t.topAcademies?.length === 0 && <p className="an-empty">Sin datos aún</p>}
               <ol className="top-list">
                 {t.topAcademies?.map((a, i) => (
@@ -299,7 +300,7 @@ export default function Analytics() {
 
             {/* Top competidores */}
             <div className="an-card">
-              <h3 className="an-card__title">🥊 Top Competidores por Victorias</h3>
+              <h3 className="an-card__title"><Dumbbell size={15} /> Top Competidores por Victorias</h3>
               {t.topCompetitors?.length === 0 && <p className="an-empty">Sin datos aún</p>}
               <ol className="top-list">
                 {t.topCompetitors?.map((c, i) => (
@@ -317,7 +318,7 @@ export default function Analytics() {
 
             {/* Torneos recientes */}
             <div className="an-card an-card--wide">
-              <h3 className="an-card__title">📋 Torneos Recientes</h3>
+              <h3 className="an-card__title"><ClipboardList size={15} /> Torneos Recientes</h3>
               {t.activeTournaments?.length === 0 && <p className="an-empty">Sin torneos</p>}
               <table className="an-table">
                 <thead>
@@ -355,7 +356,7 @@ export default function Analytics() {
 
   const renderAcademies = () => (
     <div>
-      <SectionTitle>🏫 Ranking de Escuelas / Academias</SectionTitle>
+      <SectionTitle><Building2 size={18} /> Ranking de Escuelas / Academias</SectionTitle>
       <div className="an-search-bar">
         <input
           placeholder="Buscar academia…"
@@ -413,7 +414,7 @@ export default function Analytics() {
 
   const renderCompetitors = () => (
     <div>
-      <SectionTitle>🥋 Ranking de Competidores</SectionTitle>
+      <SectionTitle><Swords size={18} /> Ranking de Competidores</SectionTitle>
       <div className="an-search-bar">
         <input
           placeholder="Buscar por nombre o academia…"
@@ -473,7 +474,7 @@ export default function Analytics() {
 
   const renderTournaments = () => (
     <div>
-      <SectionTitle>🏆 Métricas por Torneo</SectionTitle>
+      <SectionTitle><Trophy size={18} /> Métricas por Torneo</SectionTitle>
       <div className="an-search-bar">
         <input
           placeholder="Buscar torneo…"
@@ -546,7 +547,7 @@ export default function Analytics() {
 
   const renderBrackets = () => (
     <div>
-      <SectionTitle>🔑 Métricas por Llave</SectionTitle>
+      <SectionTitle><Key size={18} /> Métricas por Llave</SectionTitle>
       {loading.brackets ? (
         <div className="an-loading">Cargando llaves…</div>
       ) : error.brackets ? (
@@ -582,9 +583,9 @@ export default function Analytics() {
                         ? <><span className="cell--win">{b.completed_matches}</span>/{b.total_matches}</>
                         : '—'}
                     </td>
-                    <td>{b.first_place ? `🥇 ${b.first_place}` : '—'}</td>
-                    <td>{b.second_place ? `🥈 ${b.second_place}` : '—'}</td>
-                    <td>{b.third_place ? `🥉 ${b.third_place}` : '—'}</td>
+                    <td>{b.first_place ? <><Medal size={13} color="#f59e0b" /> {b.first_place}</> : '—'}</td>
+                    <td>{b.second_place ? <><Medal size={13} color="#9ca3af" /> {b.second_place}</> : '—'}</td>
+                    <td>{b.third_place ? <><Medal size={13} color="#b45309" /> {b.third_place}</> : '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -608,13 +609,13 @@ export default function Analytics() {
   }[a] || a);
 
   const actionIcon = a => ({
-    punch_body:         '👊',
-    kick_body:          '🦵',
-    kick_head:          '🎯',
-    spinning_kick_body: '🌀',
-    spinning_kick_head: '💫',
-    gam_jeom:           '⚠️',
-  }[a] || '•');
+    punch_body:         <Zap size={14} />,
+    kick_body:          <Activity size={14} />,
+    kick_head:          <Target size={14} />,
+    spinning_kick_body: <RotateCcw size={14} />,
+    spinning_kick_head: <Sparkles size={14} />,
+    gam_jeom:           <AlertTriangle size={14} />,
+  }[a] || <span>•</span>);
 
   const renderScoring = () => {
     const sm = scoringMetrics;
@@ -627,7 +628,7 @@ export default function Analytics() {
 
     return (
       <div>
-        <SectionTitle>⚡ Scoring — Técnicas, Zonas y Precisión</SectionTitle>
+        <SectionTitle><Zap size={18} /> Scoring — Técnicas, Zonas y Precisión</SectionTitle>
 
         {loading.scoring ? (
           <div className="an-loading">Cargando scoring…</div>
@@ -639,11 +640,11 @@ export default function Analytics() {
             <div className="scoring-top-grid">
               {/* Zona */}
               <div className="an-card">
-                <h3 className="an-card__title">🎯 Distribución por Zona</h3>
+                <h3 className="an-card__title"><Target size={15} /> Distribución por Zona</h3>
                 {!totalZonePts ? <p className="an-empty">Sin datos de puntos</p> : (
                   <div className="zone-breakdown">
                     <div className="zone-item">
-                      <span className="zone-icon">💫</span>
+                      <span className="zone-icon"><Sparkles size={16} /></span>
                       <span className="zone-label">Cabeza</span>
                       <span className="zone-pts">{z.head_points || 0} pts · {z.head_count || 0}×</span>
                       <div className="win-bar">
@@ -652,7 +653,7 @@ export default function Analytics() {
                       </div>
                     </div>
                     <div className="zone-item">
-                      <span className="zone-icon">🦵</span>
+                      <span className="zone-icon"><Activity size={16} /></span>
                       <span className="zone-label">Cuerpo</span>
                       <span className="zone-pts">{z.body_points || 0} pts · {z.body_count || 0}×</span>
                       <div className="win-bar">
@@ -662,7 +663,7 @@ export default function Analytics() {
                     </div>
                     {(z.gam_jeom_points || 0) > 0 && (
                       <div className="zone-item">
-                        <span className="zone-icon">⚠️</span>
+                        <span className="zone-icon"><AlertTriangle size={16} /></span>
                         <span className="zone-label">Gam-jeom</span>
                         <span className="zone-pts">{z.gam_jeom_points} pts</span>
                         <div className="win-bar">
@@ -680,16 +681,16 @@ export default function Analytics() {
 
               {/* Precisión */}
               <div className="an-card">
-                <h3 className="an-card__title">💡 Precisión de Jueces</h3>
+                <h3 className="an-card__title"><Lightbulb size={15} /> Precisión de Jueces</h3>
                 <p className="an-card__sub">
                   Un voto "perdido" es cuando un juez marca pero los demás no confirman a tiempo → el punto no cuenta.
                 </p>
                 {!totalVotes ? <p className="an-empty">Sin votos registrados aún</p> : (
                   <>
                     <div className="stat-grid stat-grid--sm">
-                      <StatCard label="Total votos"  value={totalVotes}          color="blue"   icon="🗳️" />
-                      <StatCard label="Conectados"   value={p.connected_votes||0} color="green"  icon="✅" sub={`${connPct}%`} />
-                      <StatCard label="Perdidos"     value={p.missed_votes||0}    color="red"    icon="❌" sub={`${missPct}%`} />
+                      <StatCard label="Total votos"  value={totalVotes}          color="blue"   icon={<Vote size={16} />} />
+                      <StatCard label="Conectados"   value={p.connected_votes||0} color="green"  icon={<CheckCircle2 size={16} />} sub={`${connPct}%`} />
+                      <StatCard label="Perdidos"     value={p.missed_votes||0}    color="red"    icon={<XCircle size={16} />} sub={`${missPct}%`} />
                     </div>
                     <div className="precision-bar-wrap">
                       <div className="precision-bar">
@@ -697,8 +698,8 @@ export default function Analytics() {
                         <div className="precision-bar__fill precision-bar__fill--miss" style={{ width: `${missPct}%`, marginLeft: `${connPct}%` }} />
                       </div>
                       <div className="precision-labels">
-                        <span className="cell--win">✅ {connPct}% conectados</span>
-                        <span className="cell--loss">❌ {missPct}% perdidos</span>
+                        <span className="cell--win"><CheckCircle2 size={13} /> {connPct}% conectados</span>
+                        <span className="cell--loss"><XCircle size={13} /> {missPct}% perdidos</span>
                       </div>
                     </div>
                   </>
@@ -709,7 +710,7 @@ export default function Analytics() {
             {/* By action */}
             {sm.byAction?.length > 0 && (
               <div className="an-card">
-                <h3 className="an-card__title">🥊 Puntos por Técnica</h3>
+                <h3 className="an-card__title"><Dumbbell size={15} /> Puntos por Técnica</h3>
                 <table className="an-table an-table--hover">
                   <thead>
                     <tr>
@@ -751,10 +752,10 @@ export default function Analytics() {
             {/* By round */}
             {sm.byRound?.length > 0 && (
               <div className="an-card">
-                <h3 className="an-card__title">🔄 Puntos por Ronda</h3>
+                <h3 className="an-card__title"><RefreshCw size={15} /> Puntos por Ronda</h3>
                 <table className="an-table">
                   <thead>
-                    <tr><th>Ronda</th><th>🔴 Rojo</th><th>🔵 Azul</th><th>Total ronda</th></tr>
+                    <tr><th>Ronda</th><th><Circle size={10} fill="#ef4444" color="#ef4444" /> Rojo</th><th><Circle size={10} fill="#3b82f6" color="#3b82f6" /> Azul</th><th>Total ronda</th></tr>
                   </thead>
                   <tbody>
                     {[1, 2, 3].map(r => {
@@ -780,7 +781,7 @@ export default function Analytics() {
         ) : null}
 
         {/* Competitor scoring table */}
-        <SectionTitle>🥋 Scoring por Competidor</SectionTitle>
+        <SectionTitle><Swords size={18} /> Scoring por Competidor</SectionTitle>
         {loading.scoringComp ? (
           <div className="an-loading">Cargando…</div>
         ) : error.scoringComp ? (
@@ -794,9 +795,9 @@ export default function Analytics() {
                   <th>Competidor</th>
                   <th>Academia</th>
                   <th>Pts</th>
-                  <th>💫 Cabeza</th>
-                  <th>🦵 Cuerpo</th>
-                  <th>⚠️ Gam-j</th>
+                  <th><Sparkles size={13} /> Cabeza</th>
+                  <th><Activity size={13} /> Cuerpo</th>
+                  <th><AlertTriangle size={13} /> Gam-j</th>
                   <th>Técnica fav.</th>
                   <th>Votos</th>
                   <th>Conectados</th>
@@ -845,9 +846,9 @@ export default function Analytics() {
     return (
       <div className="modal-overlay" onClick={closeDetail}>
         <div className="modal-box" onClick={e => e.stopPropagation()}>
-          <button className="modal-close" onClick={closeDetail}>✕</button>
+          <button className="modal-close" onClick={closeDetail}><X size={15} /></button>
           <h2 className="modal-title">
-            {isComp ? '🥋' : '🏫'} {detailName}
+            {isComp ? <Swords size={18} /> : <Building2 size={18} />} {detailName}
           </h2>
 
           {detailLoading && <div className="an-loading">Cargando detalle…</div>}
@@ -877,7 +878,7 @@ export default function Analytics() {
               {/* Podios (academias) */}
               {!isComp && detailData.podiums?.length > 0 && (
                 <>
-                  <h3 className="modal-subtitle">🏅 Podios</h3>
+                  <h3 className="modal-subtitle"><Award size={15} /> Podios</h3>
                   <table className="an-table">
                     <thead>
                       <tr><th>Torneo</th><th>Posición</th></tr>
@@ -886,10 +887,10 @@ export default function Analytics() {
                       {detailData.podiums.map(p => {
                         const pos = [];
                         const nm = detailName.toLowerCase();
-                        if (p.first_place_academy?.toLowerCase().includes(nm))  pos.push('🥇 1° lugar');
-                        if (p.second_place_academy?.toLowerCase().includes(nm)) pos.push('🥈 2° lugar');
-                        if (p.third_place_1_academy?.toLowerCase().includes(nm)) pos.push('🥉 3° lugar');
-                        if (p.third_place_2_academy?.toLowerCase().includes(nm)) pos.push('🥉 3° lugar');
+                        if (p.first_place_academy?.toLowerCase().includes(nm))  pos.push('1° lugar');
+                        if (p.second_place_academy?.toLowerCase().includes(nm)) pos.push('2° lugar');
+                        if (p.third_place_1_academy?.toLowerCase().includes(nm)) pos.push('3° lugar');
+                        if (p.third_place_2_academy?.toLowerCase().includes(nm)) pos.push('3° lugar');
                         return (
                           <tr key={p.id}>
                             <td>{p.tournament_name}</td>
@@ -963,7 +964,7 @@ export default function Analytics() {
       <div className="an-header">
         <div className="an-header__left">
           <Link to="/admin" className="an-back-btn">← Volver al Admin</Link>
-          <h1 className="an-title">📊 Dashboard & Reportes</h1>
+          <h1 className="an-title"><BarChart2 size={22} /> Dashboard & Reportes</h1>
         </div>
         <button
           className="an-refresh-btn"
@@ -977,19 +978,19 @@ export default function Analytics() {
           }}
           title="Recargar datos"
         >
-          🔄 Actualizar
+          <RefreshCw size={14} /> Actualizar
         </button>
       </div>
 
       {/* Tournament selector */}
       <div className="an-tournament-selector">
-        <label className="an-selector-label">🏆 Torneo:</label>
+        <label className="an-selector-label"><Trophy size={14} /> Torneo:</label>
         <select
           className="an-selector"
           value={selectedTournamentId ?? ''}
           onChange={e => setSelectedTournamentId(e.target.value ? parseInt(e.target.value) : null)}
         >
-          <option value="">🌐 Todos los torneos</option>
+          <option value="">Todos los torneos</option>
           {tournamentsList.map(t => (
             <option key={t.id} value={t.id}>
               {t.name}{t.category ? ` · ${t.category}` : ''}
@@ -998,7 +999,7 @@ export default function Analytics() {
         </select>
         {selectedTournamentId && (
           <button className="an-selector-clear" onClick={() => setSelectedTournamentId(null)}>
-            ✕ Todos
+            <X size={13} /> Todos
           </button>
         )}
       </div>

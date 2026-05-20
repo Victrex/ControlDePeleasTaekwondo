@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
+import { Trophy, User, Medal, Clock, Check } from 'lucide-react';
 import api from '../../utils/api';
 
 export default function Awards() {
@@ -153,12 +154,12 @@ export default function Awards() {
   return (
     <div className="awards-page">
       <header className="dashboard-header">
-        <h1>🏆 Premiación</h1>
+        <h1><Trophy size={22} /> Premiación</h1>
         <div className="header-info">
           <button onClick={() => navigate('/admin')} className="btn-back">
             ← Volver al Dashboard
           </button>
-          <span className="user-info">👤 {user?.username}</span>
+          <span className="user-info"><User size={14} /> {user?.username}</span>
           <button onClick={handleLogout} className="btn-logout">Cerrar Sesión</button>
         </div>
       </header>
@@ -216,26 +217,26 @@ export default function Awards() {
                               onChange={() => toggleAwarded(bracket.id)}
                             />
                             <span className="checkmark"></span>
-                            <span className="label-text">{awarded ? '✓ Premiado' : 'Marcar como premiado'}</span>
+                            <span className="label-text">{awarded ? <><Check size={13} /> Premiado</> : 'Marcar como premiado'}</span>
                           </label>
                         </div>
 
                         <div className="podium-display">
                           {!podium || podium.status === 'no_matches' ? (
                             <div className="podium-pending">
-                              <span className="pending-icon">⏳</span>
+                              <span className="pending-icon"><Clock size={20} /></span>
                               <span>Sin competencias registradas</span>
                             </div>
                           ) : podium.status === 'pending' ? (
                             <div className="podium-pending">
-                              <span className="pending-icon">⏳</span>
+                              <span className="pending-icon"><Clock size={20} /></span>
                               <span>Por disputarse</span>
                             </div>
                           ) : (
                             <div className="podium-places">
                               {/* Primer Lugar */}
                               <div className="podium-place first">
-                                <div className="place-medal">🥇</div>
+                                <div className="place-medal"><Medal size={28} color="#f59e0b" /></div>
                                 <div className="place-label">1er Lugar</div>
                                 <div className="place-name">{podium.first?.name || 'Por definir'}</div>
                                 {podium.first?.academy && (
@@ -245,7 +246,7 @@ export default function Awards() {
 
                               {/* Segundo Lugar */}
                               <div className="podium-place second">
-                                <div className="place-medal">🥈</div>
+                                <div className="place-medal"><Medal size={28} color="#9ca3af" /></div>
                                 <div className="place-label">2do Lugar</div>
                                 <div className="place-name">{podium.second?.name || 'Por definir'}</div>
                                 {podium.second?.academy && (
@@ -256,7 +257,7 @@ export default function Awards() {
                               {/* Tercer Lugar(es) */}
                               {podium.third && podium.third.length > 0 && (
                                 <div className="podium-place third">
-                                  <div className="place-medal">🥉</div>
+                                  <div className="place-medal"><Medal size={28} color="#b45309" /></div>
                                   <div className="place-label">3er Lugar{podium.third.length > 1 ? 'es' : ''}</div>
                                   {podium.third.map((competitor, idx) => (
                                     <div key={idx} className="third-place-entry">

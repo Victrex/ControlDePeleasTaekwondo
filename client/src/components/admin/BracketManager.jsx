@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Trash2, Plus, Users, GripVertical, Target, RefreshCw, Trophy, ClipboardList, Swords, Check, Medal, Zap } from 'lucide-react';
 import api from '../../utils/api';
 
 export default function BracketManager({ tournamentId, initialBracketId, onFightsCreated }) {
@@ -459,7 +460,7 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
                       >
                         <span className="player-seed">{match.competitor1_name && match.competitor1_name !== '?' ? '●' : '○'}</span>
                         <span className="player-name">{getSlotText(match.competitor1_name, isByeC1)}</span>
-                        {isComp1Winner && <span className="winner-badge">✓</span>}
+                        {isComp1Winner && <span className="winner-badge"><Check size={11} /></span>}
                         {hasBye && match.competitor1_name && match.competitor1_name !== '?' && <span className="bye-badge">BYE ↑</span>}
                       </div>
                       <div className="match-vs">{hasBye ? '—' : 'VS'}</div>
@@ -470,11 +471,11 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
                       >
                         <span className="player-seed">{match.competitor2_name && match.competitor2_name !== '?' ? '●' : '○'}</span>
                         <span className="player-name">{getSlotText(match.competitor2_name, isByeC2)}</span>
-                        {isComp2Winner && <span className="winner-badge">✓</span>}
+                        {isComp2Winner && <span className="winner-badge"><Check size={11} /></span>}
                         {hasBye && match.competitor2_name && match.competitor2_name !== '?' && <span className="bye-badge">BYE ↑</span>}
                       </div>
                       {match.winner_name && (
-                        <div className="match-winner-label">🏆 {match.winner_name}</div>
+                        <div className="match-winner-label"><Trophy size={12} /> {match.winner_name}</div>
                       )}
                     </div>
                     {/* Conector derecho */}
@@ -531,7 +532,7 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
                 onMouseEnter={e => e.currentTarget.style.opacity = '1'}
                 onMouseLeave={e => e.currentTarget.style.opacity = '0.7'}
               >
-                🗑️
+                <Trash2 size={14} />
               </button>
             </div>
           ))}
@@ -542,7 +543,7 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
         <div className="bracket-content">
           {/* Formulario para agregar competidores */}
           <div className="add-competitors-section">
-            <h4>➕ Agregar Competidores</h4>
+            <h4><Plus size={15} /> Agregar Competidores</h4>
             <form onSubmit={handleAddCompetitors} className="compact-form">
               {newCompetitors.map((comp, idx) => (
                 <div key={idx} className="competitor-input-row">
@@ -576,7 +577,7 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
           {/* Lista de competidores con drag & drop */}
           <div className="competitors-list-compact">
             <h4>
-              👥 Competidores ({competitors.filter(c => c.name !== 'BYE').length})
+              <Users size={15} /> Competidores ({competitors.filter(c => c.name !== 'BYE').length})
               {competitors.length > 0 && (
                 <span className="dnd-hint"> · Arrastra para reordenar</span>
               )}
@@ -603,7 +604,7 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
                             const hasManualByes = competitors.some(x => x.name === 'BYE');
                             const realCount = competitors.filter(x => x.name !== 'BYE').length;
                             if (!hasManualByes && realCount % 2 === 1 && idx === 0) {
-                              return <span className="bye-auto-badge" title="Pasa directo a la siguiente ronda">⚡ BYE</span>;
+                              return <span className="bye-auto-badge" title="Pasa directo a la siguiente ronda"><Zap size={11} /> BYE</span>;
                             }
                             return null;
                           })()}
@@ -623,15 +624,15 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
             {competitors.length >= 2 && (
               <div className="bracket-actions">
                 <button onClick={handleAddBye} className="btn-small btn-bye">
-                  ➕ Agregar BYE
+                  <Plus size={13} /> Agregar BYE
                 </button>
                 {matches.length === 0 ? (
                   <button onClick={handleGenerateBracket} className="btn-primary btn-generate">
-                    🎯 Generar Bracket Oficial
+                    <Target size={14} /> Generar Bracket Oficial
                   </button>
                 ) : (
                   <button onClick={handleRegenerateBracket} className="btn-primary btn-generate" style={{background:'#d97706'}}>
-                    🔄 Regenerar Bracket
+                    <RefreshCw size={14} /> Regenerar Bracket
                   </button>
                 )}
               </div>
@@ -639,7 +640,7 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
             {competitors.length === 1 && (
               <div className="bracket-actions">
                 <button onClick={handleAddBye} className="btn-small btn-bye">
-                  ➕ Agregar BYE
+                  <Plus size={13} /> Agregar BYE
                 </button>
               </div>
             )}
@@ -649,7 +650,7 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
           {(matches.length > 0 || competitors.length >= 2) && (
             <div className="tournament-bracket">
               <h4>
-                {matches.length > 0 ? '🏆 Bracket del Torneo' : '📋 Vista Previa del Bracket'}
+                {matches.length > 0 ? <><Trophy size={15} /> Bracket del Torneo</> : <><ClipboardList size={15} /> Vista Previa del Bracket</>}
                 {matches.length === 0 && <span className="preview-badge">SIMULACIÓN</span>}
               </h4>
               <div className="bracket-scroll-container">
@@ -661,10 +662,10 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
                     <>
                       <div className="round-spacer"></div>
                       <div className="bracket-round champion-round">
-                        <div className="round-header champion-header">🏆 CAMPEÓN/A</div>
+                        <div className="round-header champion-header"><Trophy size={15} /> CAMPEÓN/A</div>
                         <div className="round-matches champion-matches">
                           <div className="champion-card">
-                            <div className="champion-trophy">🥇</div>
+                            <div className="champion-trophy"><Medal size={40} /></div>
                             <div className="champion-name">{champion.winner_name}</div>
                             <div className="champion-label">CAMPEÓN/A DE LA LLAVE</div>
                           </div>
@@ -680,7 +681,7 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
           {/* Mensaje cuando no hay competidores */}
           {competitors.length < 2 && matches.length === 0 && (
             <div className="empty-bracket-message">
-              <div className="empty-icon">🥋</div>
+              <div className="empty-icon"><Swords size={36} /></div>
               <h4>Configura tu Bracket</h4>
               <p>Agrega al menos 2 competidores para visualizar el bracket del torneo.</p>
             </div>
@@ -698,7 +699,7 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
       {confirmWinner && (
         <div className="confirm-winner-overlay" onClick={() => setConfirmWinner(null)}>
           <div className="confirm-winner-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="confirm-winner-icon">🏆</div>
+            <div className="confirm-winner-icon"><Trophy size={36} /></div>
             <h3>Confirmar Ganador</h3>
             <p>¿Deseas declarar a <strong>{confirmWinner.competitorName}</strong> como ganador de esta pelea?</p>
             <div className="confirm-winner-actions">
@@ -706,7 +707,7 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
                 Cancelar
               </button>
               <button className="btn-confirm" onClick={handleConfirmWinner}>
-                ✓ Confirmar Ganador
+                <Check size={14} /> Confirmar Ganador
               </button>
             </div>
           </div>
