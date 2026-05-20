@@ -307,19 +307,22 @@ export class FightService {
     try {
       // Buscar el match correspondiente en bracket_matches que tenga los mismos competidores
       const matches = Bracket.getMatches(fight.bracket_id);
-      
-      // Buscar match que coincida con los competidores de la pelea (por nombre)
+
+      // Buscar match que coincida con los competidores de la pelea (por nombre),
+      // incluyendo matches ya completados para evitar duplicados pero usando el
+      // estado "pending" para encontrar el que hay que resolver ahora.
       const matchingMatch = matches.find(m => {
-        const comp1Match = m.competitor1_name === fight.competitor_red || m.competitor1_name === fight.competitor_blue;
-        const comp2Match = m.competitor2_name === fight.competitor_red || m.competitor2_name === fight.competitor_blue;
-        return comp1Match && comp2Match && m.status !== 'completed';
+        const names = [m.competitor1_name, m.competitor2_name];
+        return names.includes(fight.competitor_red) &&
+               names.includes(fight.competitor_blue) &&
+               m.status !== 'completed';
       });
-      
+
       if (!matchingMatch) {
-        console.log('No se encontró match pendiente para actualizar');
+        console.log('No se encontró match pendiente para actualizar en el bracket');
         return;
       }
-      
+
       // Determinar winner_id según el ganador de la pelea
       const winnerName = fight.final_winner === 'red' ? fight.competitor_red : fight.competitor_blue;
       let winnerId = null;
@@ -328,31 +331,39 @@ export class FightService {
       } else if (matchingMatch.competitor2_name === winnerName) {
         winnerId = matchingMatch.competitor2_id;
       }
-      
+
       if (!winnerId) {
-        console.log('No se pudo determinar winner_id');
+        console.log('No se pudo determinar winner_id para el bracket');
         return;
       }
-      
-      // Actualizar el match con el ganador y avanzar al siguiente
-      const result = Bracket.setMatchWinner(matchingMatch.id, winnerId);
-      
-      // Si hay siguiente match listo, crear la pelea automáticamente
-      if (result.nextMatchReady) {
-        const nextMatch = result.nextMatchReady;
+
+      // Resolver el match (propaga ganador y hace auto-resolve de BYEs en cascada)
+      Bracket.setMatchWinner(matchingMatch.id, winnerId);
+
+      // Tras la propagación, buscar TODOS los matches con ambos competidores reales
+      // y que aún no tengan una pelea asociada → crear la pelea faltante.
+      const updatedMatches = Bracket.getMatches(fight.bracket_id);
+      const pendingWithBoth = updatedMatches.filter(m =>
+        m.competitor1_id && m.competitor2_id && m.status !== 'completed'
+      );
+
+      for (const nextMatch of pendingWithBoth) {
         const existingFight = db.prepare(`
-          SELECT * FROM fights WHERE bracket_id = ? 
-          AND ((competitor_red = ? AND competitor_blue = ?) OR (competitor_red = ? AND competitor_blue = ?))
+          SELECT id FROM fights WHERE bracket_id = ?
+          AND (
+            (competitor_red = ? AND competitor_blue = ?)
+            OR (competitor_red = ? AND competitor_blue = ?)
+          )
         `).get(
-          fight.bracket_id, 
+          fight.bracket_id,
           nextMatch.competitor1_name, nextMatch.competitor2_name,
           nextMatch.competitor2_name, nextMatch.competitor1_name
         );
-        
+
         if (!existingFight) {
-          // Crear la nueva pelea para el siguiente match
           const newFight = this.createFightFromMatch(fight.tournament_id, fight.bracket_id, nextMatch);
-          console.log('Nueva pelea creada desde bracket:', newFight.id);
+          console.log('Nueva pelea de bracket creada automáticamente:', newFight.id,
+            `(${nextMatch.competitor1_name} vs ${nextMatch.competitor2_name})`);
         }
       }
     } catch (error) {
