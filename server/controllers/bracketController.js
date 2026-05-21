@@ -1,4 +1,5 @@
 import { Bracket } from '../models/Bracket.js';
+import { Athlete } from '../models/Athlete.js';
 import { FightService } from '../services/fightService.js';
 import { timerService } from '../services/timerService.js';
 import db from '../config/database.js';
@@ -25,11 +26,23 @@ export const bracketController = {
     }
   },
 
-  // Agregar competidor a la llave
+  // Agregar competidor a la llave (soporta athlete_id opcional)
   addCompetitor(req, res) {
     try {
-      const { bracket_id, name, academy, peto_color, seed } = req.body;
-      const id = Bracket.addCompetitor(bracket_id, name, academy, peto_color, seed);
+      const { bracket_id, name, academy, peto_color, seed, athlete_id } = req.body;
+
+      let finalName = name;
+      let finalAcademy = academy;
+
+      // Si se proporciona athlete_id, copiar datos del atleta
+      if (athlete_id) {
+        const athlete = Athlete.findById(athlete_id);
+        if (!athlete) return res.status(404).json({ error: 'Atleta no encontrado' });
+        finalName = athlete.name;
+        finalAcademy = athlete.academy || academy || '';
+      }
+
+      const id = Bracket.addCompetitor(bracket_id, finalName, finalAcademy, peto_color, seed, athlete_id || null);
       res.json({ success: true, id });
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -262,6 +275,45 @@ export const bracketController = {
       });
     } catch (error) {
       console.error('Error eliminando llave:', error);
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  // Asignación masiva de atletas a llaves
+  // body: { assignments: [{ athlete_id, bracket_id, peto_color, seed }] }
+  batchAssign(req, res) {
+    try {
+      const { assignments } = req.body;
+      if (!Array.isArray(assignments) || assignments.length === 0) {
+        return res.status(400).json({ error: 'Se requiere un array de asignaciones' });
+      }
+
+      const results = [];
+      const errors = [];
+
+      for (const a of assignments) {
+        try {
+          const athlete = Athlete.findById(a.athlete_id);
+          if (!athlete) {
+            errors.push({ athlete_id: a.athlete_id, error: 'Atleta no encontrado' });
+            continue;
+          }
+          const id = Bracket.addCompetitor(
+            a.bracket_id,
+            athlete.name,
+            athlete.academy || '',
+            a.peto_color || null,
+            a.seed || null,
+            athlete.id
+          );
+          results.push({ athlete_id: athlete.id, bracket_id: a.bracket_id, competitor_id: id });
+        } catch (e) {
+          errors.push({ athlete_id: a.athlete_id, error: e.message });
+        }
+      }
+
+      res.json({ success: true, assigned: results.length, results, errors });
+    } catch (error) {
       res.status(500).json({ error: error.message });
     }
   }

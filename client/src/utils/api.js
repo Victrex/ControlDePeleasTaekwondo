@@ -412,6 +412,75 @@ class API {
     const q = tournamentId ? `?tournament_id=${tournamentId}` : '';
     return this.request(`/analytics/scoring/competitors${q}`);
   }
+
+  // ============================================
+  // ATLETAS
+  // ============================================
+  async getAthletes(filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.q) params.set('q', filters.q);
+    if (filters.belt != null && filters.belt !== '') params.set('belt', filters.belt);
+    if (filters.gender) params.set('gender', filters.gender);
+    if (filters.academy) params.set('academy', filters.academy);
+    const qs = params.toString();
+    return this.request(`/athletes${qs ? '?' + qs : ''}`);
+  }
+
+  async getAthlete(id) {
+    return this.request(`/athletes/${id}`);
+  }
+
+  async createAthlete(data) {
+    return this.request('/athletes', { method: 'POST', body: JSON.stringify(data) });
+  }
+
+  async updateAthlete(id, data) {
+    return this.request(`/athletes/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+  }
+
+  async deleteAthlete(id) {
+    return this.request(`/athletes/${id}`, { method: 'DELETE' });
+  }
+
+  async importAthletes(athletes) {
+    return this.request('/athletes/import', { method: 'POST', body: JSON.stringify({ athletes }) });
+  }
+
+  async suggestCategoryForAthlete(id) {
+    return this.request(`/athletes/${id}/suggest-category`);
+  }
+
+  async suggestCategoryFromData(data) {
+    return this.request('/athletes/suggest-category', { method: 'POST', body: JSON.stringify(data) });
+  }
+
+  async getAthleteBrackets(id, tournamentId = null) {
+    const qs = tournamentId ? `?tournamentId=${tournamentId}` : '';
+    return this.request(`/athletes/${id}/brackets${qs}`);
+  }
+
+  async batchAssign(assignments) {
+    return this.request('/brackets/batch-assign', { method: 'POST', body: JSON.stringify({ assignments }) });
+  }
+
+  // ============================================
+  // PLANTILLAS DE CATEGORÍAS
+  // ============================================
+  async getCategories() {
+    return this.request('/categories');
+  }
+
+  async createCategory(data) {
+    return this.request('/categories', { method: 'POST', body: JSON.stringify(data) });
+  }
+
+  async updateCategory(id, data) {
+    return this.request(`/categories/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+  }
+
+  async deleteCategory(id) {
+    return this.request(`/categories/${id}`, { method: 'DELETE' });
+  }
 }
 
 export default new API();

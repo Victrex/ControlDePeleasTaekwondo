@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useSocket } from '../../contexts/SocketContext';
 import api from '../../utils/api';
 import BracketManager from './BracketManager';
-import { Trash2, Swords, BarChart2, Trophy, Circle, User, Settings, Link2, Monitor, Play, Check, RefreshCw } from 'lucide-react';
+import { Trash2, Swords, BarChart2, Trophy, Circle, User, Settings, Link2, Monitor, Play, Check, RefreshCw, Users, Tag, Zap, Upload, Search } from 'lucide-react';
 
 export default function Dashboard() {
   const { user, logout } = useAuth();
@@ -45,9 +45,48 @@ export default function Dashboard() {
   });
   // Nuevo: lista de peleadores para la llave
   const [competitors, setCompetitors] = useState([
-    { name: '', academy: '' },
-    { name: '', academy: '' }
+    { name: '', academy: '', athlete_id: null },
+    { name: '', academy: '', athlete_id: null }
   ]);
+  // Búsqueda de atletas en el modal Nueva Pelea
+  const [fightAthleteSearch, setFightAthleteSearch] = useState(['', '']);
+  const [fightAthleteSugs, setFightAthleteSugs] = useState([[], []]);
+  const [fightShowSugs, setFightShowSugs] = useState([false, false]);
+  const fightSearchTimers = useRef([]);
+  const BELT_NAMES_D = ['Blanco','Amarillo','Naranja','Verde','Azul','Rojo','Negro'];
+  const BELT_COLORS_D = ['#d1d5db','#FFD700','#FF8C00','#2E8B57','#1565C0','#C62828','#212121'];
+
+  const searchFightAthletes = useCallback((query, idx) => {
+    clearTimeout(fightSearchTimers.current[idx]);
+    if (!query || query.length < 2) {
+      setFightAthleteSugs(prev => { const n = [...prev]; n[idx] = []; return n; });
+      return;
+    }
+    fightSearchTimers.current[idx] = setTimeout(async () => {
+      try {
+        const res = await api.getAthletes({ q: query });
+        setFightAthleteSugs(prev => { const n = [...prev]; n[idx] = res || []; return n; });
+      } catch { /* ignore */ }
+    }, 250);
+  }, []);
+
+  const handleFightAthleteChange = (idx, value) => {
+    const s = [...fightAthleteSearch]; s[idx] = value; setFightAthleteSearch(s);
+    const c = [...competitors]; c[idx] = { ...c[idx], name: value, athlete_id: null }; setCompetitors(c);
+    searchFightAthletes(value, idx);
+    const v = [...fightShowSugs]; v[idx] = true; setFightShowSugs(v);
+  };
+
+  const handleSelectFightAthlete = (idx, athlete) => {
+    const c = [...competitors]; c[idx] = { name: athlete.name, academy: athlete.academy || '', athlete_id: athlete.id }; setCompetitors(c);
+    const s = [...fightAthleteSearch]; s[idx] = athlete.name; setFightAthleteSearch(s);
+    const v = [...fightShowSugs]; v[idx] = false; setFightShowSugs(v);
+  };
+
+  const resetFightModal = () => {
+    setCompetitors([{ name:'', academy:'', athlete_id:null },{ name:'', academy:'', athlete_id:null }]);
+    setFightAthleteSearch(['','']); setFightAthleteSugs([[],[]]); setFightShowSugs([false,false]);
+  };
 
   useEffect(() => {
     loadTournaments();
@@ -168,6 +207,7 @@ export default function Dashboard() {
           bracket_id: newBracket.id,
           name: competitors[i].name,
           academy: competitors[i].academy,
+          athlete_id: competitors[i].athlete_id || null,
           peto_color: i % 2 === 0 ? 'blue' : 'red',
           seed: i + 1
         });
@@ -177,10 +217,7 @@ export default function Dashboard() {
       setShowBracketModal(true);
       setShowNewFight(false);
       setFightForm({ competitor_red: '', competitor_blue: '', academy_red: '', academy_blue: '' });
-      setCompetitors([
-        { name: '', academy: '' },
-        { name: '', academy: '' }
-      ]);
+      resetFightModal();
     } catch (error) {
       alert('Error creando llave: ' + error.message);
     } finally {
@@ -359,6 +396,18 @@ export default function Dashboard() {
           </button>
           <button onClick={() => navigate('/admin/awards')} className="btn-awards">
             <Trophy size={14} /> Premiación
+          </button>
+          <button onClick={() => navigate('/admin/athletes')} className="btn-awards" style={{ background: 'rgba(59,130,246,.2)', borderColor: '#3b82f6', color: '#93c5fd' }}>
+            <Users size={14} /> Atletas
+          </button>
+          <button onClick={() => navigate('/admin/quick-checkin')} className="btn-awards" style={{ background: 'rgba(245,158,11,.2)', borderColor: '#f59e0b', color: '#fcd34d' }}>
+            <Zap size={14} /> Check-In
+          </button>
+          <button onClick={() => navigate('/admin/categories')} className="btn-awards" style={{ background: 'rgba(124,58,237,.2)', borderColor: '#7c3aed', color: '#a78bfa' }}>
+            <Tag size={14} /> Categorías
+          </button>
+          <button onClick={() => navigate('/admin/bulk-import')} className="btn-awards" style={{ background: 'rgba(16,185,129,.2)', borderColor: '#10b981', color: '#6ee7b7' }}>
+            <Upload size={14} /> Importar
           </button>
           <span className={`connection-status ${connected ? 'connected' : 'disconnected'}`}>
             {connected ? <><Circle size={9} fill="#22c55e" color="#22c55e" /> Conectado</> : <><Circle size={9} fill="#ef4444" color="#ef4444" /> Desconectado</>}
@@ -857,70 +906,177 @@ export default function Dashboard() {
 
       {/* Modal Nueva Pelea */}
       {showNewFight && (
-        <div className="modal-overlay">
-          <div className="modal">
-            <h3>Nueva Pelea / Crear Llave</h3>
-            <form onSubmit={handleCreateFight}>
-              <div>
-                <label style={{marginBottom: '0.5rem', display: 'block'}}>Peleadores de la llave:</label>
-                {competitors.map((comp, idx) => (
-                  <div key={idx} style={{display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem'}}>
-                    <input
-                      type="text"
-                      value={comp.name}
-                      onChange={e => {
-                        const arr = [...competitors];
-                        arr[idx].name = e.target.value;
-                        setCompetitors(arr);
-                      }}
-                      placeholder="Nombre *"
-                      required
-                      style={{flex: 1}}
-                    />
-                    <input
-                      type="text"
-                      value={comp.academy}
-                      onChange={e => {
-                        const arr = [...competitors];
-                        arr[idx].academy = e.target.value;
-                        setCompetitors(arr);
-                      }}
-                      placeholder="Academia"
-                      style={{flex: 1}}
-                    />
-                    <button 
-                      type="button" 
-                      onClick={() => {
-                        const arr = competitors.filter((_, i) => i !== idx);
-                        setCompetitors(arr);
-                      }} 
-                      disabled={competitors.length <= 2} 
-                      style={{
-                        background: competitors.length <= 2 ? '#ccc' : '#ff5252',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '50%',
-                        width: '28px',
-                        height: '28px',
-                        cursor: competitors.length <= 2 ? 'not-allowed' : 'pointer',
-                        fontSize: '16px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
-                      title="Eliminar"
-                    ><Trash2 size={16} /></button>
-                  </div>
-                ))}
-                <button type="button" disabled={creatingFight} onClick={() => setCompetitors([...competitors, { name: '', academy: '' }])} className="btn-secondary" style={{marginTop: '0.5rem'}}>
-                  + Agregar Peleador
-                </button>
+        <div className="modal-overlay" onClick={() => { setShowNewFight(false); resetFightModal(); }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background:'#1e293b', border:'1px solid #334155', borderRadius:16,
+            padding:'1.5rem', width:'calc(100% - 2rem)', maxWidth:560,
+            maxHeight:'calc(100vh - 2rem)', overflowY:'auto',
+            animation:'slideUp 0.3s', boxShadow:'0 20px 60px rgba(0,0,0,0.5)'
+          }}>
+            {/* Cabecera */}
+            <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'1.25rem', paddingBottom:'1rem', borderBottom:'1px solid #334155'}}>
+              <div style={{display:'flex', alignItems:'center', gap:12}}>
+                <div style={{background:'rgba(59,130,246,0.15)', padding:10, borderRadius:10, display:'flex'}}>
+                  <Swords size={20} color="#3b82f6" />
+                </div>
+                <div>
+                  <h3 style={{margin:0, fontSize:'1.1rem', fontWeight:700, color:'#f1f5f9'}}>Nueva Llave</h3>
+                  <p style={{margin:0, fontSize:12, color:'#64748b'}}>Agrega los competidores y crea la llave</p>
+                </div>
               </div>
-              <div className="modal-buttons">
-                <button type="button" disabled={creatingFight} onClick={() => setShowNewFight(false)} className="btn-secondary">
-                  Cancelar
+              <button onClick={() => { setShowNewFight(false); resetFightModal(); }} style={{
+                background:'rgba(255,255,255,0.05)', border:'1px solid #334155', color:'#94a3b8',
+                borderRadius:8, width:34, height:34, cursor:'pointer', fontSize:18, lineHeight:1,
+                display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0
+              }}>×</button>
+            </div>
+
+            <form onSubmit={handleCreateFight}>
+              <div style={{display:'flex', flexDirection:'column', gap:10}}>
+                {competitors.map((comp, idx) => {
+                  const isBlue = idx % 2 !== 0;
+                  const accent   = isBlue ? '#3b82f6' : '#ef4444';
+                  const accentBg = isBlue ? 'rgba(59,130,246,0.08)' : 'rgba(239,68,68,0.08)';
+                  const accentBr = isBlue ? 'rgba(59,130,246,0.22)' : 'rgba(239,68,68,0.22)';
+                  return (
+                    <div key={idx} style={{background:accentBg, border:`1px solid ${accentBr}`, borderRadius:12, padding:'14px 14px 12px'}}>
+                      {/* Etiqueta + botón quitar */}
+                      <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10}}>
+                        <span style={{
+                          background:accent, color:'#fff', fontSize:10, fontWeight:800,
+                          padding:'3px 10px', borderRadius:20, letterSpacing:'0.08em'
+                        }}>{isBlue ? 'AZUL' : 'ROJO'} · #{idx+1}</span>
+                        {competitors.length > 2 && (
+                          <button type="button" onClick={() => {
+                            setCompetitors(competitors.filter((_,i)=>i!==idx));
+                            setFightAthleteSearch(fightAthleteSearch.filter((_,i)=>i!==idx));
+                            setFightAthleteSugs(fightAthleteSugs.filter((_,i)=>i!==idx));
+                            setFightShowSugs(fightShowSugs.filter((_,i)=>i!==idx));
+                          }} style={{
+                            background:'rgba(239,68,68,0.15)', border:'1px solid rgba(239,68,68,0.3)',
+                            color:'#fc8181', borderRadius:6, padding:'3px 8px', cursor:'pointer', fontSize:12
+                          }}>Quitar</button>
+                        )}
+                      </div>
+
+                      {/* Buscador de atleta */}
+                      <div style={{position:'relative', marginBottom:8}}>
+                        <div style={{position:'absolute', left:11, top:'50%', transform:'translateY(-50%)', pointerEvents:'none', color:'#64748b', display:'flex'}}>
+                          <Search size={14} />
+                        </div>
+                        <input
+                          type="text"
+                          value={fightAthleteSearch[idx] ?? ''}
+                          onChange={e => handleFightAthleteChange(idx, e.target.value)}
+                          onFocus={() => { const v=[...fightShowSugs]; v[idx]=true; setFightShowSugs(v); }}
+                          placeholder="Buscar atleta por nombre..."
+                          required
+                          autoComplete="off"
+                          style={{
+                            width:'100%', paddingLeft:32, background:'#0f172a',
+                            border:`1px solid ${accentBr}`, borderRadius:8, color:'#e2e8f0',
+                            padding:'10px 12px 10px 32px', fontSize:14, boxSizing:'border-box'
+                          }}
+                        />
+                        {/* Dropdown */}
+                        {fightShowSugs[idx] && (fightAthleteSearch[idx]?.length >= 2) && (
+                          <div onMouseDown={e => e.preventDefault()} style={{
+                            position:'absolute', top:'100%', left:0, right:0, zIndex:300,
+                            background:'#1e293b', border:'1px solid #334155', borderRadius:10,
+                            boxShadow:'0 8px 32px rgba(0,0,0,0.5)', maxHeight:220, overflowY:'auto', marginTop:3
+                          }}>
+                            {fightAthleteSugs[idx]?.length > 0 ? fightAthleteSugs[idx].map(a => (
+                              <div key={a.id} onClick={() => handleSelectFightAthlete(idx, a)}
+                                style={{display:'flex', alignItems:'center', gap:8, padding:'10px 14px', cursor:'pointer', borderBottom:'1px solid #0f172a'}}
+                                onMouseEnter={e=>e.currentTarget.style.background='#334155'}
+                                onMouseLeave={e=>e.currentTarget.style.background=''}
+                              >
+                                <span style={{
+                                  fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:4, whiteSpace:'nowrap',
+                                  background:BELT_COLORS_D[a.belt??0], color:(a.belt??0)>1?'#fff':'#111'
+                                }}>{BELT_NAMES_D[a.belt??0]}</span>
+                                <span style={{fontWeight:600, color:'#e2e8f0', flex:1, fontSize:13}}>{a.name}</span>
+                                {a.academy && <span style={{color:'#64748b', fontSize:12}}>{a.academy}</span>}
+                                {a.weight && <span style={{color:'#94a3b8', fontSize:11, marginLeft:4}}>{a.weight} kg</span>}
+                              </div>
+                            )) : (
+                              <div style={{padding:'12px 14px', color:'#94a3b8', fontSize:13, display:'flex', flexDirection:'column', gap:8}}>
+                                <span>No existe en el registro</span>
+                                {comp.academy?.trim() ? (
+                                  <button type="button"
+                                    onMouseDown={async (e) => {
+                                      e.preventDefault();
+                                      try {
+                                        const created = await api.createAthlete({ name: fightAthleteSearch[idx].trim(), academy: comp.academy });
+                                        handleSelectFightAthlete(idx, created);
+                                      } catch(err) { alert('Error: ' + err.message); }
+                                    }}
+                                    style={{background:'rgba(100,116,139,0.2)', border:'1px solid #475569', color:'#cbd5e1', padding:'6px 12px', borderRadius:6, cursor:'pointer', fontSize:12, fontWeight:600, alignSelf:'flex-start'}}
+                                  >+ Crear en registro y agregar</button>
+                                ) : (
+                                  <span style={{fontSize:11, color:'#475569'}}>Llena la academia para poder crear el registro</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Academia */}
+                      <input
+                        type="text"
+                        value={comp.academy}
+                        onChange={e => { const arr=[...competitors]; arr[idx].academy=e.target.value; setCompetitors(arr); }}
+                        placeholder="Academia"
+                        style={{
+                          width:'100%', background:'#0f172a', border:`1px solid ${accentBr}`,
+                          borderRadius:8, color:'#e2e8f0', padding:'10px 12px', fontSize:14,
+                          boxSizing:'border-box'
+                        }}
+                      />
+
+                      {/* Estado */}
+                      {comp.athlete_id && (
+                        <div style={{display:'flex', alignItems:'center', gap:5, color:'#34d399', fontSize:12, marginTop:7}}>
+                          <Check size={12} /> Vinculado al registro
+                        </div>
+                      )}
+                      {!comp.athlete_id && comp.name && (
+                        <div style={{color:'#64748b', fontSize:12, marginTop:7}}>Sin vincular — escribe 2+ letras para buscar</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Agregar peleador */}
+              <button type="button" disabled={creatingFight}
+                onClick={() => {
+                  setCompetitors([...competitors, {name:'',academy:'',athlete_id:null}]);
+                  setFightAthleteSearch([...fightAthleteSearch,'']);
+                  setFightAthleteSugs([...fightAthleteSugs,[]]);
+                  setFightShowSugs([...fightShowSugs,false]);
+                }}
+                style={{
+                  width:'100%', marginTop:10, background:'rgba(255,255,255,0.04)',
+                  border:'1px dashed #334155', color:'#64748b', borderRadius:10,
+                  padding:'10px', cursor:'pointer', fontSize:13, fontWeight:600, transition:'all 0.15s'
+                }}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor='#475569'; e.currentTarget.style.color='#94a3b8';}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor='#334155'; e.currentTarget.style.color='#64748b';}}
+              >+ Agregar Peleador</button>
+
+              {/* Botones acción */}
+              <div style={{display:'flex', gap:10, marginTop:16, justifyContent:'flex-end', flexWrap:'wrap'}}>
+                <button type="button" disabled={creatingFight}
+                  onClick={() => { setShowNewFight(false); resetFightModal(); }}
+                  style={{background:'rgba(255,255,255,0.05)', border:'1px solid #334155', color:'#94a3b8', borderRadius:8, padding:'10px 20px', cursor:'pointer', fontSize:14, fontWeight:600}}
+                >Cancelar</button>
+                <button type="submit" disabled={creatingFight}
+                  style={{background:creatingFight?'#1d4ed8':'#3b82f6', border:'none', color:'#fff', borderRadius:8, padding:'10px 24px', cursor:creatingFight?'not-allowed':'pointer', fontSize:14, fontWeight:700, display:'flex', alignItems:'center', gap:6}}
+                >
+                  <Swords size={15} /> {creatingFight ? 'Creando...' : 'Crear Llave'}
                 </button>
-                <button type="submit" disabled={creatingFight} className="btn-primary">{creatingFight ? 'Creando...' : 'Crear'}</button>
               </div>
             </form>
           </div>

@@ -131,18 +131,51 @@ export function initializeDatabase() {
     )
   `);
 
+  // Tabla de atletas (registro global reutilizable)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS athletes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      dob TEXT,
+      weight REAL,
+      gender TEXT CHECK(gender IN ('M', 'F')),
+      belt INTEGER DEFAULT 0 CHECK(belt BETWEEN 0 AND 6),
+      academy TEXT,
+      license_number TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Tabla de plantillas de categorías
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS category_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      gender TEXT DEFAULT 'Both' CHECK(gender IN ('M', 'F', 'Both')),
+      min_age INTEGER DEFAULT 0,
+      max_age INTEGER DEFAULT 99,
+      min_weight REAL DEFAULT 0,
+      max_weight REAL DEFAULT 999,
+      belt_min INTEGER DEFAULT 0 CHECK(belt_min BETWEEN 0 AND 6),
+      belt_max INTEGER DEFAULT 6 CHECK(belt_max BETWEEN 0 AND 6),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   // Tabla de competidores de la llave
   db.exec(`
     CREATE TABLE IF NOT EXISTS bracket_competitors (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       bracket_id INTEGER NOT NULL,
+      athlete_id INTEGER,
       name TEXT NOT NULL,
       academy TEXT,
       peto_color TEXT CHECK(peto_color IN ('blue', 'red')),
       seed INTEGER,
       eliminated INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (bracket_id) REFERENCES brackets(id) ON DELETE CASCADE
+      FOREIGN KEY (bracket_id) REFERENCES brackets(id) ON DELETE CASCADE,
+      FOREIGN KEY (athlete_id) REFERENCES athletes(id) ON DELETE SET NULL
     )
   `);
 
@@ -238,6 +271,9 @@ export function initializeDatabase() {
     db.exec(`ALTER TABLE bracket_competitors ADD COLUMN eliminated INTEGER DEFAULT 0`);
   } catch (e) {}
   try {
+    db.exec(`ALTER TABLE bracket_competitors ADD COLUMN athlete_id INTEGER REFERENCES athletes(id) ON DELETE SET NULL`);
+  } catch (e) {}
+  try {
     db.exec(`ALTER TABLE bracket_matches ADD COLUMN next_match_slot INTEGER DEFAULT 1`);
   } catch (e) {}
 
@@ -283,6 +319,42 @@ export function initializeDatabase() {
     // Password: admin123 (cambiar en producción)
     const hashedPassword = bcrypt.hashSync('admin123', 10);
     db.prepare('INSERT INTO users (username, password, role) VALUES (?, ?, ?)').run('admin', hashedPassword, 'admin');
+  }
+
+  // Seed de categorías estándar si no existen
+  const catCount = db.prepare('SELECT COUNT(*) as c FROM category_templates').get();
+  if (catCount.c === 0) {
+    const insertCat = db.prepare(`
+      INSERT INTO category_templates (name, gender, min_age, max_age, min_weight, max_weight, belt_min, belt_max)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const seedCategories = [
+      ['Pre-Mini Colores Mixto',   'Both', 4,  6,  0, 999, 0, 5],
+      ['Infantil A Colores M',     'M',    7,  9,  0, 999, 0, 5],
+      ['Infantil A Colores F',     'F',    7,  9,  0, 999, 0, 5],
+      ['Infantil B Colores M',     'M',   10, 11,  0, 999, 0, 5],
+      ['Infantil B Colores F',     'F',   10, 11,  0, 999, 0, 5],
+      ['Infantil Negro M',         'M',    7, 11,  0, 999, 6, 6],
+      ['Infantil Negro F',         'F',    7, 11,  0, 999, 6, 6],
+      ['Pre-Cadete Colores M',     'M',   12, 13,  0, 999, 0, 5],
+      ['Pre-Cadete Colores F',     'F',   12, 13,  0, 999, 0, 5],
+      ['Cadete Colores M',         'M',   14, 15,  0, 999, 0, 5],
+      ['Cadete Colores F',         'F',   14, 15,  0, 999, 0, 5],
+      ['Cadete Negro M',           'M',   12, 15,  0, 999, 6, 6],
+      ['Cadete Negro F',           'F',   12, 15,  0, 999, 6, 6],
+      ['Junior Colores M',         'M',   16, 17,  0, 999, 0, 5],
+      ['Junior Colores F',         'F',   16, 17,  0, 999, 0, 5],
+      ['Junior Negro M',           'M',   16, 17,  0, 999, 6, 6],
+      ['Junior Negro F',           'F',   16, 17,  0, 999, 6, 6],
+      ['Senior Negro M',           'M',   18, 40,  0, 999, 6, 6],
+      ['Senior Negro F',           'F',   18, 40,  0, 999, 6, 6],
+      ['Master Negro M',           'M',   41, 99,  0, 999, 6, 6],
+      ['Master Negro F',           'F',   41, 99,  0, 999, 6, 6],
+    ];
+    const seedTx = db.transaction(() => {
+      for (const row of seedCategories) insertCat.run(...row);
+    });
+    seedTx();
   }
 
   console.log('✅ Base de datos inicializada correctamente');

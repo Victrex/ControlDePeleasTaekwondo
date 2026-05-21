@@ -7,6 +7,10 @@ import Dashboard from './components/admin/Dashboard';
 import Awards from './components/admin/Awards';
 import ScoringControl from './components/admin/ScoringControl';
 import Analytics from './components/admin/Analytics';
+import AthleteRegistry from './components/admin/AthleteRegistry';
+import CategoryManager from './components/admin/CategoryManager';
+import QuickCheckIn from './components/admin/QuickCheckIn';
+import BulkImport from './components/admin/BulkImport';
 import PublicDisplay from './components/public/PublicDisplay';
 import Scoreboard from './components/scoreboard/Scoreboard';
 import JudgePanel from './components/judge/JudgePanel';
@@ -69,6 +73,38 @@ function App() {
             element={
               <ProtectedRoute>
                 <Analytics />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/athletes" 
+            element={
+              <ProtectedRoute>
+                <AthleteRegistry />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/categories" 
+            element={
+              <ProtectedRoute>
+                <CategoryManager />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/quick-checkin" 
+            element={
+              <ProtectedRoute>
+                <QuickCheckIn />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/bulk-import" 
+            element={
+              <ProtectedRoute>
+                <BulkImport />
               </ProtectedRoute>
             } 
           />

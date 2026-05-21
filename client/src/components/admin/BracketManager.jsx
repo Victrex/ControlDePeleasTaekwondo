@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Trash2, Plus, Users, GripVertical, Target, RefreshCw, Trophy, ClipboardList, Swords, Check, Medal, Zap } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Trash2, Plus, Users, GripVertical, Target, RefreshCw, Trophy, ClipboardList, Swords, Check, Medal, Zap, Search, AlertTriangle } from 'lucide-react';
 import api from '../../utils/api';
 
 export default function BracketManager({ tournamentId, initialBracketId, onFightsCreated }) {
@@ -7,8 +7,14 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
   const [selectedBracket, setSelectedBracket] = useState(null);
   const [competitors, setCompetitors] = useState([]);
   const [matches, setMatches] = useState([]);
-  const [newCompetitors, setNewCompetitors] = useState([{ name: '', academy: '' }]);
+  const [newCompetitors, setNewCompetitors] = useState([{ name: '', academy: '', athlete_id: null }]);
   const [confirmWinner, setConfirmWinner] = useState(null); // { matchId, competitorId, competitorName }
+  // Búsqueda de atletas por índice de fila
+  const [athleteSearch, setAthleteSearch] = useState(['']);
+  const [athleteSuggestions, setAthleteSuggestions] = useState([[]]);
+  const [showSuggestions, setShowSuggestions] = useState([false]);
+  const [alreadyAssigned, setAlreadyAssigned] = useState({}); // athlete_id → true si ya está en otra llave
+  const searchTimers = useRef([]);
   const [draggingIdx, setDraggingIdx] = useState(null);
   const dragItem = useRef(null);
   const dragOverItem = useRef(null);
@@ -62,18 +68,65 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
     }
   };
 
+  // Buscar atletas con debounce
+  const searchAthletes = useCallback((query, idx) => {
+    clearTimeout(searchTimers.current[idx]);
+    if (!query || query.length < 2) {
+      setAthleteSuggestions(prev => { const n = [...prev]; n[idx] = []; return n; });
+      return;
+    }
+    searchTimers.current[idx] = setTimeout(async () => {
+      try {
+        const results = await api.getAthletes({ q: query });
+        setAthleteSuggestions(prev => { const n = [...prev]; n[idx] = results || []; return n; });
+      } catch { /* ignore */ }
+    }, 250);
+  }, []);
+
+  const handleAthleteSearchChange = (idx, value) => {
+    const updated = [...athleteSearch]; updated[idx] = value;
+    setAthleteSearch(updated);
+    // Limpiar selección previa si el usuario escribe de nuevo
+    const updatedComp = [...newCompetitors];
+    updatedComp[idx] = { name: value, academy: updatedComp[idx].academy, athlete_id: null };
+    setNewCompetitors(updatedComp);
+    searchAthletes(value, idx);
+    const vis = [...showSuggestions]; vis[idx] = true; setShowSuggestions(vis);
+  };
+
+  const handleSelectAthlete = (idx, athlete) => {
+    const updatedComp = [...newCompetitors];
+    updatedComp[idx] = { name: athlete.name, academy: athlete.academy || '', athlete_id: athlete.id };
+    setNewCompetitors(updatedComp);
+    const updatedSearch = [...athleteSearch]; updatedSearch[idx] = athlete.name;
+    setAthleteSearch(updatedSearch);
+    const vis = [...showSuggestions]; vis[idx] = false; setShowSuggestions(vis);
+    // Verificar si ya está asignado en esta llave
+    const inBracket = competitors.some(c => c.athlete_id === athlete.id);
+    if (inBracket) {
+      setAlreadyAssigned(prev => ({ ...prev, [athlete.id]: 'bracket' }));
+    }
+  };
+
+  const BELT_NAMES = ['Blanco','Amarillo','Naranja','Verde','Azul','Rojo','Negro'];
+  const BELT_COLORS = ['#d1d5db','#FFD700','#FF8C00','#2E8B57','#1565C0','#C62828','#212121'];
+
   const handleAddCompetitors = async (e) => {
     e.preventDefault();
     for (let i = 0; i < newCompetitors.length; i++) {
       const color = i % 2 === 0 ? 'blue' : 'red';
       await api.addBracketCompetitor({ 
         bracket_id: selectedBracket.id, 
-        ...newCompetitors[i], 
+        ...newCompetitors[i],
         peto_color: color,
         seed: competitors.length + i + 1
       });
     }
-    setNewCompetitors([{ name: '', academy: '' }]);
+    setNewCompetitors([{ name: '', academy: '', athlete_id: null }]);
+    setAthleteSearch(['']);
+    setAthleteSuggestions([[]]);
+    setShowSuggestions([false]);
+    setAlreadyAssigned({});
     loadCompetitors(selectedBracket.id);
   };
 
@@ -182,7 +235,10 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
   };
 
   const handleAddCompetitorField = () => {
-    setNewCompetitors([...newCompetitors, { name: '', academy: '' }]);
+    setNewCompetitors([...newCompetitors, { name: '', academy: '', athlete_id: null }]);
+    setAthleteSearch([...athleteSearch, '']);
+    setAthleteSuggestions([...athleteSuggestions, []]);
+    setShowSuggestions([...showSuggestions, false]);
   };
 
   // Agrupar matches por ronda
@@ -546,24 +602,114 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
             <h4><Plus size={15} /> Agregar Competidores</h4>
             <form onSubmit={handleAddCompetitors} className="compact-form">
               {newCompetitors.map((comp, idx) => (
-                <div key={idx} className="competitor-input-row">
-                  <input
-                    type="text"
-                    value={comp.name}
-                    onChange={e => handleCompetitorChange(idx, 'name', e.target.value)}
-                    placeholder={`Nombre del competidor`}
-                    required
-                  />
-                  <input
-                    type="text"
-                    value={comp.academy}
-                    onChange={e => handleCompetitorChange(idx, 'academy', e.target.value)}
-                    placeholder="Academia"
-                  />
-                  {newCompetitors.length > 1 && (
-                    <button type="button" className="btn-remove" onClick={() => {
-                      setNewCompetitors(newCompetitors.filter((_, i) => i !== idx));
-                    }}>×</button>
+                <div key={idx} className="competitor-input-row" style={{ position: 'relative', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <div style={{ position: 'relative', flex: 1 }}>
+                      <Search size={13} style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: '#64748b', pointerEvents: 'none' }} />
+                      <input
+                        type="text"
+                        value={athleteSearch[idx] ?? ''}
+                        onChange={e => handleAthleteSearchChange(idx, e.target.value)}
+                        onFocus={() => { const v = [...showSuggestions]; v[idx] = true; setShowSuggestions(v); }}
+                        placeholder="Buscar atleta del registro..."
+                        autoComplete="off"
+                        style={{ paddingLeft: 28, width: '100%' }}
+                        required
+                      />
+                      {/* Dropdown de sugerencias */}
+                      {showSuggestions[idx] && (athleteSearch[idx]?.length >= 2) && (
+                        <div className="athlete-suggestions-dropdown" onMouseDown={e => e.preventDefault()}>
+                          {athleteSuggestions[idx]?.length > 0 ? (
+                            <>
+                              {athleteSuggestions[idx].map(a => (
+                                <div
+                                  key={a.id}
+                                  className="athlete-suggestion-item"
+                                  onClick={() => handleSelectAthlete(idx, a)}
+                                >
+                                  <span
+                                    className="sugg-belt"
+                                    style={{ background: BELT_COLORS[a.belt ?? 0], color: a.belt > 1 ? '#fff' : '#111' }}
+                                  >{BELT_NAMES[a.belt ?? 0]}</span>
+                                  <span className="sugg-name">{a.name}</span>
+                                  {a.academy && <span className="sugg-academy">{a.academy}</span>}
+                                  {a.weight && <span className="sugg-weight">{a.weight} kg</span>}
+                                  {competitors.some(c => c.athlete_id === a.id) && (
+                                    <span className="sugg-warning" title="Ya está en esta llave"><AlertTriangle size={12} /> en llave</span>
+                                  )}
+                                </div>
+                              ))}
+                            </>
+                          ) : (
+                            <div className="sugg-not-found">
+                              <span>No existe en el registro</span>
+                              {newCompetitors[idx].academy?.trim() ? (
+                                <div className="sugg-not-found-actions">
+                                  <button
+                                    type="button"
+                                    className="sugg-btn-manual"
+                                    onClick={async () => {
+                                      try {
+                                        const created = await api.createAthlete({
+                                          name: athleteSearch[idx].trim(),
+                                          academy: newCompetitors[idx].academy || '',
+                                        });
+                                        const updatedComp = [...newCompetitors];
+                                        updatedComp[idx] = { name: created.name, academy: created.academy || '', athlete_id: created.id };
+                                        setNewCompetitors(updatedComp);
+                                        const updatedSearch = [...athleteSearch]; updatedSearch[idx] = created.name;
+                                        setAthleteSearch(updatedSearch);
+                                        const vis = [...showSuggestions]; vis[idx] = false; setShowSuggestions(vis);
+                                      } catch(err) {
+                                        alert('Error creando atleta: ' + err.message);
+                                      }
+                                    }}
+                                  >
+                                    + Crear en registro y agregar
+                                  </button>
+                                </div>
+                              ) : (
+                                <span style={{fontSize:11, color:'#475569'}}>Llena la academia para poder crear el registro</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {/* Academia (auto-rellena, editable) */}
+                    <input
+                      type="text"
+                      value={comp.academy}
+                      onChange={e => handleCompetitorChange(idx, 'academy', e.target.value)}
+                      placeholder="Academia"
+                      style={{ flex: '0 0 140px' }}
+                    />
+                    {newCompetitors.length > 1 && (
+                      <button type="button" className="btn-remove" onClick={() => {
+                        setNewCompetitors(newCompetitors.filter((_, i) => i !== idx));
+                        setAthleteSearch(athleteSearch.filter((_, i) => i !== idx));
+                        setAthleteSuggestions(athleteSuggestions.filter((_, i) => i !== idx));
+                        setShowSuggestions(showSuggestions.filter((_, i) => i !== idx));
+                      }}>×</button>
+                    )}
+                  </div>
+                  {/* Aviso si el atleta ya está en esta llave */}
+                  {comp.athlete_id && competitors.some(c => c.athlete_id === comp.athlete_id) && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#f59e0b', fontSize: 12 }}>
+                      <AlertTriangle size={12} /> Este atleta ya está en la llave
+                    </div>
+                  )}
+                  {/* Chip de confirmación cuando hay selección del registro */}
+                  {comp.athlete_id && !competitors.some(c => c.athlete_id === comp.athlete_id) && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#34d399', fontSize: 12 }}>
+                      <Check size={12} /> Vinculado al registro de atletas
+                    </div>
+                  )}
+                  {/* Si escribió nombre libre (sin seleccionar del registro) */}
+                  {!comp.athlete_id && comp.name && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#64748b', fontSize: 12 }}>
+                      Sin vincular — escribe 2+ letras para buscar en el registro
+                    </div>
                   )}
                 </div>
               ))}
@@ -715,6 +861,44 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
       )}
 
       <style>{`
+        /* ── Buscador de atletas ── */
+        .athlete-suggestions-dropdown {
+          position: absolute; top: 100%; left: 0; right: 0; z-index: 200;
+          background: #1e293b; border: 1px solid #334155; border-radius: 8px;
+          box-shadow: 0 8px 24px rgba(0,0,0,0.4); max-height: 220px; overflow-y: auto;
+          margin-top: 2px;
+        }
+        .athlete-suggestion-item {
+          display: flex; align-items: center; gap: 8px;
+          padding: 8px 12px; cursor: pointer; transition: background 0.1s;
+          border-bottom: 1px solid #0f172a;
+        }
+        .athlete-suggestion-item:last-child { border-bottom: none; }
+        .athlete-suggestion-item:hover { background: #334155; }
+        .sugg-belt {
+          font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;
+          white-space: nowrap; flex-shrink: 0;
+        }
+        .sugg-name { font-weight: 600; color: #e2e8f0; flex: 1; font-size: 13px; }
+        .sugg-academy { color: #64748b; font-size: 12px; }
+        .sugg-weight { color: #94a3b8; font-size: 11px; margin-left: auto; flex-shrink: 0; }
+        .sugg-warning {
+          display: flex; align-items: center; gap: 3px;
+          color: #f59e0b; font-size: 11px; font-weight: 600; flex-shrink: 0;
+        }
+        .sugg-not-found {
+          padding: 12px 14px; color: #94a3b8; font-size: 13px;
+          display: flex; flex-direction: column; gap: 8px;
+        }
+        .sugg-not-found-actions { display: flex; gap: 8px; }
+        .sugg-btn-manual {
+          background: rgba(100,116,139,0.2); border: 1px solid #475569;
+          color: #cbd5e1; padding: 5px 12px; border-radius: 6px;
+          cursor: pointer; font-size: 12px; font-weight: 600;
+          transition: all 0.15s;
+        }
+        .sugg-btn-manual:hover { background: rgba(100,116,139,0.35); color: #e2e8f0; }
+
         .bracket-manager {
           padding: 0.75rem;
         }

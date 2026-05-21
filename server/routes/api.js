@@ -6,6 +6,8 @@ import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { bracketController } from '../controllers/bracketController.js';
 import { scoringController } from '../controllers/scoringController.js';
 import { analyticsController } from '../controllers/analyticsController.js';
+import { athleteController } from '../controllers/athleteController.js';
+import { categoryController } from '../controllers/categoryController.js';
 
 const router = express.Router();
 
@@ -77,6 +79,7 @@ router.delete('/fights/:id', requireAdmin, fightController.delete);
 router.post('/brackets', requireAdmin, bracketController.create);
 router.get('/brackets/tournament/:tournament_id', bracketController.getByTournament);
 router.post('/brackets/competitor', requireAdmin, bracketController.addCompetitor);
+router.post('/brackets/batch-assign', requireAdmin, bracketController.batchAssign);
 router.get('/brackets/:bracket_id/competitors', bracketController.getCompetitors);
 router.post('/brackets/:bracket_id/generate', requireAdmin, bracketController.generateStructure);
 router.get('/brackets/:bracket_id/matches', bracketController.getMatches);
@@ -84,6 +87,27 @@ router.post('/brackets/match/:match_id/winner', requireAdmin, bracketController.
 router.put('/brackets/:bracket_id/competitors/reorder', requireAdmin, bracketController.reorderCompetitors);
 router.delete('/brackets/competitor/:competitor_id', requireAdmin, bracketController.removeCompetitor);
 router.delete('/brackets/:bracket_id', requireAdmin, bracketController.deleteBracket);
+
+// ============================================
+// RUTAS DE ATLETAS
+// ============================================
+router.get('/athletes', requireAuth, athleteController.getAll);
+router.post('/athletes/import', requireAdmin, athleteController.importBatch);
+router.post('/athletes/suggest-category', requireAuth, athleteController.suggestCategoryFromData);
+router.get('/athletes/:id/suggest-category', requireAuth, athleteController.suggestCategory);
+router.get('/athletes/:id/brackets', requireAuth, athleteController.getBracketAssignments);
+router.get('/athletes/:id', requireAuth, athleteController.getById);
+router.post('/athletes', requireAdmin, athleteController.create);
+router.put('/athletes/:id', requireAdmin, athleteController.update);
+router.delete('/athletes/:id', requireAdmin, athleteController.delete);
+
+// ============================================
+// RUTAS DE PLANTILLAS DE CATEGORÍAS
+// ============================================
+router.get('/categories', requireAuth, categoryController.getAll);
+router.post('/categories', requireAdmin, categoryController.create);
+router.put('/categories/:id', requireAdmin, categoryController.update);
+router.delete('/categories/:id', requireAdmin, categoryController.delete);
 
 // ============================================
 // RUTAS DE SCORING / PUNTUACIÓN

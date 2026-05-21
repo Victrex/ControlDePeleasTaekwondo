@@ -45,12 +45,12 @@ export class Bracket {
   }
 
   // Agregar competidor a la llave
-  static addCompetitor(bracket_id, name, academy, peto_color, seed = null) {
+  static addCompetitor(bracket_id, name, academy, peto_color, seed = null, athlete_id = null) {
     const stmt = db.prepare(`
-      INSERT INTO bracket_competitors (bracket_id, name, academy, peto_color, seed)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO bracket_competitors (bracket_id, athlete_id, name, academy, peto_color, seed)
+      VALUES (?, ?, ?, ?, ?, ?)
     `);
-    const result = stmt.run(bracket_id, name, academy, peto_color, seed);
+    const result = stmt.run(bracket_id, athlete_id, name, academy, peto_color, seed);
     return result.lastInsertRowid;
   }
 
