@@ -1,14 +1,25 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Upload, FileSpreadsheet, Check, AlertCircle, X, RefreshCw, Users, Download } from 'lucide-react';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import api from '../../utils/api';
 import './BulkImport.css';
+import { loadBeltConfig, buildBeltMap } from '../../utils/beltConfig';
 
-const BELT_NAMES = ['Blanco', 'Amarillo', 'Naranja', 'Verde', 'Azul', 'Rojo', 'Negro'];
-const BELT_COLORS = ['#d1d5db','#FFD700','#FF8C00','#2E8B57','#1565C0','#C62828','#212121'];
-const BELT_TEXT   = ['#111',   '#333',   '#fff',   '#fff',  '#fff',  '#fff',  '#fff'];
+// ── Sistema de 10 niveles KUP ──────────────────────────────────────────────
+// Índice | KUP   | Nombre          | Nota
+//   0    | 9 KUP | Blanco          |
+//   1    | 8 KUP | Blanco-Amarillo | En algunas academias llamado "Naranja"
+//   2    | 7 KUP | Amarillo        |
+//   3    | 6 KUP | Naranja         | Naranja estándar (después del amarillo)
+//   4    | 5 KUP | Verde           |
+//   5    | 4 KUP | Azul-Verde      |
+//   6    | 3 KUP | Azul            |
+//   7    | 2 KUP | Rojo            |
+//   8    | 1 KUP | Rojo-Negro      | Poom para menores
+//   9    | 1 DAN+| Negro           |
+// BELT_NAMES / BELT_COLORS / BELT_TEXT se cargan dinámicamente dentro del componente desde beltConfig
 
 const FIELD_LABELS = {
   name:           'Nombre',
@@ -16,27 +27,79 @@ const FIELD_LABELS = {
   dob:            'Fecha nacimiento (YYYY-MM-DD)',
   weight:         'Peso (kg)',
   gender:         'Género (M/F)',
-  belt:           'Cinturón (0-6 o nombre)',
+  belt:           'Cinturón (0-9, KUP o nombre)',
   license_number: 'Licencia',
 };
 const REQUIRED_FIELDS = ['name'];
 
-const BELT_MAP = {};
-BELT_NAMES.forEach((n, i) => {
-  BELT_MAP[n.toLowerCase()] = i;
-  BELT_MAP[String(i)] = i;
-});
+// BELT_MAP se construye dinámicamente en el componente desde loadBeltConfig()
+
 const GENDER_MAP = { masculino: 'M', femenino: 'F', male: 'M', female: 'F', hombre: 'M', mujer: 'F', m: 'M', f: 'F' };
 
-function normalizeRow(row, mapping) {
+function parseDateToYMD(raw) {
+  if (raw === null || raw === undefined || raw === '') return '';
+  // JavaScript Date object (from XLSX cellDates: true)
+  if (raw instanceof Date) {
+    if (isNaN(raw.getTime())) return '';
+    const y = raw.getUTCFullYear();
+    const m = String(raw.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(raw.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  // Excel serial number (number type)
+  if (typeof raw === 'number') {
+    // Excel epoch offset: days since Dec 30, 1899
+    const ms = Math.round((raw - 25569) * 86400 * 1000);
+    const date = new Date(ms);
+    if (!isNaN(date.getTime())) {
+      const y = date.getUTCFullYear();
+      const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const d = String(date.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+    return '';
+  }
+  const str = String(raw).trim();
+  if (!str) return '';
+  // Already YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+  // DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
+  const dmy = str.match(/^(\d{1,2})[\-\/\.](\d{1,2})[\-\/\.](\d{4})$/);
+  if (dmy) return `${dmy[3]}-${dmy[2].padStart(2,'0')}-${dmy[1].padStart(2,'0')}`;
+  // YYYY/MM/DD or YYYY.MM.DD
+  const ymd = str.match(/^(\d{4})[\-\/\.](\d{1,2})[\-\/\.](\d{1,2})$/);
+  if (ymd) return `${ymd[1]}-${ymd[2].padStart(2,'0')}-${ymd[3].padStart(2,'0')}`;
+  // Numeric string (serial as text)
+  const num = Number(str);
+  if (!isNaN(num) && num > 1 && num < 80000) {
+    return parseDateToYMD(num);
+  }
+  // Fallback: JS Date parsing (handles 'Apr 15, 2010', ISO strings, etc.)
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) {
+    const y = parsed.getFullYear();
+    const m = String(parsed.getMonth() + 1).padStart(2, '0');
+    const d = String(parsed.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  return str;
+}
+
+function normalizeRow(row, mapping, beltMap) {
   const out = {};
   for (const [field, col] of Object.entries(mapping)) {
     if (!col) continue;
-    let val = (row[col] ?? '').toString().trim();
+    const raw = row[col] ?? '';
+    if (field === 'dob') {
+      const parsed = parseDateToYMD(raw);
+      if (parsed) out.dob = parsed;
+      continue;
+    }
+    let val = raw.toString().trim();
     if (!val) continue;
     if (field === 'belt') {
       const k = val.toLowerCase();
-      out.belt = BELT_MAP[k] ?? parseInt(val) ?? 0;
+      out.belt = beltMap[k] ?? parseInt(val) ?? 0;
     } else if (field === 'gender') {
       out.gender = GENDER_MAP[val.toLowerCase()] ?? val.toUpperCase();
     } else if (field === 'weight') {
@@ -51,6 +114,13 @@ function normalizeRow(row, mapping) {
 export default function BulkImport() {
   const navigate = useNavigate();
   const fileRef = useRef(null);
+
+  // Cargar config de cinturones desde localStorage (guardada en BeltConfig page)
+  const beltCfg    = useMemo(() => loadBeltConfig(), []);
+  const BELT_NAMES  = beltCfg.map(b => b.name);
+  const BELT_COLORS = beltCfg.map(b => b.color);
+  const BELT_TEXT   = beltCfg.map(b => b.textColor);
+  const BELT_MAP    = useMemo(() => buildBeltMap(beltCfg), [beltCfg]);
   const [step, setStep] = useState('upload'); // upload | mapping | preview | done
   const [rawHeaders, setRawHeaders] = useState([]);
   const [rawData, setRawData] = useState([]);
@@ -86,25 +156,31 @@ export default function BulkImport() {
       if (ws[cell]) ws[cell].s = headerStyle;
     });
 
-    // Hoja de referencia de cinturones
+    // Hoja de referencia de cinturones con tabla KUP completa
     const refData = [
-      ['Valor numérico', 'Nombre del cinturón'],
-      [0, 'Blanco'],
-      [1, 'Amarillo'],
-      [2, 'Naranja'],
-      [3, 'Verde'],
-      [4, 'Azul'],
-      [5, 'Rojo'],
-      [6, 'Negro'],
-      ['', ''],
-      ['Género', ''],
-      ['M', 'Masculino'],
-      ['F', 'Femenino'],
-      ['', ''],
-      ['Fecha', 'Formato: AAAA-MM-DD (ej: 2010-04-15)'],
+      ['Índice', 'KUP',   'Nombre estándar',  'Nombres equivalentes / alias aceptados'],
+      [0,        '9 KUP', 'Blanco',            'blanco, white'],
+      [1,        '8 KUP', 'Blanco-Amarillo',   'blanco-amarillo, naranja, amarillo pálido, amarillo claro'],
+      [2,        '7 KUP', 'Amarillo',           'amarillo, yellow'],
+      [3,        '6 KUP', 'Naranja',            'naranja oscuro, orange, amarillo-verde'],
+      [4,        '5 KUP', 'Verde',              'verde, green, jade'],
+      [5,        '4 KUP', 'Azul-Verde',         'azul-verde, verde-azul, verde oscuro'],
+      [6,        '3 KUP', 'Azul',               'azul, blue'],
+      [7,        '2 KUP', 'Rojo',               'rojo, red, azul-rojo'],
+      [8,        '1 KUP', 'Rojo-Negro (Poom)',  'rojo-negro, poom, café, brown, marrón'],
+      [9,        '1 DAN+','Negro',              'negro, black, dan, 1dan'],
+      ['','','',''],
+      ['NOTA:',  '','El campo Cinturón acepta: índice (0-9), nombre, KUP (ej: "8 KUP") o alias.',''],
+      ['','','El índice 1 (8 KUP) agrupa academias que usan "Naranja" o "Blanco-Amarillo entre Blanco y Amarillo.',''],
+      ['','','',''],
+      ['Género', '', '', ''],
+      ['M', 'Masculino','',''],
+      ['F', 'Femenino', '',''],
+      ['','','',''],
+      ['Fecha', 'Formato: AAAA-MM-DD (ej: 2010-04-15)','',''],
     ];
     const wsRef = XLSX.utils.aoa_to_sheet(refData);
-    wsRef['!cols'] = [{ wch: 20 }, { wch: 30 }];
+    wsRef['!cols'] = [{ wch: 8 }, { wch: 8 }, { wch: 22 }, { wch: 60 }];
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Atletas');
@@ -132,7 +208,7 @@ export default function BulkImport() {
     } else if (['xlsx', 'xls', 'ods'].includes(ext)) {
       const reader = new FileReader();
       reader.onload = (e) => {
-        const wb = XLSX.read(e.target.result, { type: 'array' });
+        const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const data = XLSX.utils.sheet_to_json(ws, { defval: '' });
         if (!data.length) { setError('Hoja vacía'); return; }
@@ -168,7 +244,7 @@ export default function BulkImport() {
   };
 
   const buildPreview = () => {
-    const built = rawData.map(r => normalizeRow(r, mapping));
+    const built = rawData.map(r => normalizeRow(r, mapping, BELT_MAP));
     setRows(built);
     setStep('preview');
   };

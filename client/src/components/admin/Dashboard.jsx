@@ -4,7 +4,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useSocket } from '../../contexts/SocketContext';
 import api from '../../utils/api';
 import BracketManager from './BracketManager';
-import { Trash2, Swords, BarChart2, Trophy, Circle, User, Settings, Link2, Monitor, Play, Check, RefreshCw, Users, Tag, Zap, Upload, Search } from 'lucide-react';
+import { Trash2, Swords, BarChart2, Trophy, Circle, User, Settings, Link2, Monitor, Play, Check, RefreshCw, Users, Tag, Zap, Upload, Search, Shield } from 'lucide-react';
 
 export default function Dashboard() {
   const { user, logout } = useAuth();
@@ -53,8 +53,8 @@ export default function Dashboard() {
   const [fightAthleteSugs, setFightAthleteSugs] = useState([[], []]);
   const [fightShowSugs, setFightShowSugs] = useState([false, false]);
   const fightSearchTimers = useRef([]);
-  const BELT_NAMES_D = ['Blanco','Amarillo','Naranja','Verde','Azul','Rojo','Negro'];
-  const BELT_COLORS_D = ['#d1d5db','#FFD700','#FF8C00','#2E8B57','#1565C0','#C62828','#212121'];
+  const BELT_NAMES_D  = ['Blanco','Blanco-Amarillo','Amarillo','Naranja','Verde','Azul-Verde','Azul','Rojo','Rojo-Negro','Negro'];
+  const BELT_COLORS_D = ['#d1d5db','#F0E68C','#FFD700','#FF8C00','#2E8B57','#1a9e8c','#1565C0','#C62828','#850000','#212121'];
 
   const searchFightAthletes = useCallback((query, idx) => {
     clearTimeout(fightSearchTimers.current[idx]);
@@ -408,6 +408,9 @@ export default function Dashboard() {
           </button>
           <button onClick={() => navigate('/admin/bulk-import')} className="btn-awards" style={{ background: 'rgba(16,185,129,.2)', borderColor: '#10b981', color: '#6ee7b7' }}>
             <Upload size={14} /> Importar
+          </button>
+          <button onClick={() => navigate('/admin/belt-config')} className="btn-awards" style={{ background: 'rgba(251,191,36,.15)', borderColor: '#f59e0b', color: '#fcd34d' }}>
+            <Shield size={14} /> Cinturones
           </button>
           <span className={`connection-status ${connected ? 'connected' : 'disconnected'}`}>
             {connected ? <><Circle size={9} fill="#22c55e" color="#22c55e" /> Conectado</> : <><Circle size={9} fill="#ef4444" color="#ef4444" /> Desconectado</>}

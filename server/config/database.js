@@ -303,6 +303,79 @@ export function initializeDatabase() {
     db.exec(`ALTER TABLE scoring_config ADD COLUMN min_judges_agree INTEGER NOT NULL DEFAULT 0`);
   } catch (e) {}
 
+  // ── Migración v1: sistema de 10 niveles KUP (belt 0-9) ─────────────────────
+  // Remapeo: 0→0, 1(Amarillo)→2, 2(Naranja)→3, 3(Verde)→4, 4(Azul)→6, 5(Rojo)→7, 6(Negro)→9
+  const schemaVersion = db.pragma('user_version', { simple: true });
+  if (schemaVersion < 1) {
+    db.pragma('foreign_keys = OFF');
+    db.transaction(() => {
+      // Recrear athletes con CHECK(belt BETWEEN 0 AND 9)
+      db.exec(`
+        CREATE TABLE athletes_kup_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          dob TEXT,
+          weight REAL,
+          gender TEXT CHECK(gender IN ('M', 'F')),
+          belt INTEGER DEFAULT 0 CHECK(belt BETWEEN 0 AND 9),
+          academy TEXT,
+          license_number TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      db.exec(`
+        INSERT INTO athletes_kup_new
+        SELECT id, name, dob, weight, gender,
+          CASE belt
+            WHEN 0 THEN 0  WHEN 1 THEN 2  WHEN 2 THEN 3
+            WHEN 3 THEN 4  WHEN 4 THEN 6  WHEN 5 THEN 7
+            WHEN 6 THEN 9  ELSE belt
+          END,
+          academy, license_number, created_at
+        FROM athletes
+      `);
+      db.exec(`DROP TABLE athletes`);
+      db.exec(`ALTER TABLE athletes_kup_new RENAME TO athletes`);
+
+      // Recrear category_templates con CHECK(belt BETWEEN 0 AND 9)
+      db.exec(`
+        CREATE TABLE category_templates_kup_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          gender TEXT DEFAULT 'Both' CHECK(gender IN ('M', 'F', 'Both')),
+          min_age INTEGER DEFAULT 0,
+          max_age INTEGER DEFAULT 99,
+          min_weight REAL DEFAULT 0,
+          max_weight REAL DEFAULT 999,
+          belt_min INTEGER DEFAULT 0 CHECK(belt_min BETWEEN 0 AND 9),
+          belt_max INTEGER DEFAULT 9 CHECK(belt_max BETWEEN 0 AND 9),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      db.exec(`
+        INSERT INTO category_templates_kup_new
+        SELECT id, name, gender, min_age, max_age, min_weight, max_weight,
+          CASE belt_min
+            WHEN 0 THEN 0  WHEN 1 THEN 2  WHEN 2 THEN 3
+            WHEN 3 THEN 4  WHEN 4 THEN 6  WHEN 5 THEN 7
+            WHEN 6 THEN 9  ELSE belt_min
+          END,
+          CASE belt_max
+            WHEN 0 THEN 0  WHEN 1 THEN 2  WHEN 2 THEN 3
+            WHEN 3 THEN 4  WHEN 4 THEN 6  WHEN 5 THEN 7
+            WHEN 6 THEN 9  ELSE belt_max
+          END,
+          created_at
+        FROM category_templates
+      `);
+      db.exec(`DROP TABLE category_templates`);
+      db.exec(`ALTER TABLE category_templates_kup_new RENAME TO category_templates`);
+    })();
+    db.pragma('foreign_keys = ON');
+    db.pragma('user_version = 1');
+    console.log('✅ Migración KUP aplicada: belt expandido a 10 niveles (0-9)');
+  }
+
   // Insertar configuración por defecto si no existe
   const configExists = db.prepare('SELECT id FROM tournament_config WHERE id = 1').get();
   if (!configExists) {
@@ -329,27 +402,28 @@ export function initializeDatabase() {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const seedCategories = [
-      ['Pre-Mini Colores Mixto',   'Both', 4,  6,  0, 999, 0, 5],
-      ['Infantil A Colores M',     'M',    7,  9,  0, 999, 0, 5],
-      ['Infantil A Colores F',     'F',    7,  9,  0, 999, 0, 5],
-      ['Infantil B Colores M',     'M',   10, 11,  0, 999, 0, 5],
-      ['Infantil B Colores F',     'F',   10, 11,  0, 999, 0, 5],
-      ['Infantil Negro M',         'M',    7, 11,  0, 999, 6, 6],
-      ['Infantil Negro F',         'F',    7, 11,  0, 999, 6, 6],
-      ['Pre-Cadete Colores M',     'M',   12, 13,  0, 999, 0, 5],
-      ['Pre-Cadete Colores F',     'F',   12, 13,  0, 999, 0, 5],
-      ['Cadete Colores M',         'M',   14, 15,  0, 999, 0, 5],
-      ['Cadete Colores F',         'F',   14, 15,  0, 999, 0, 5],
-      ['Cadete Negro M',           'M',   12, 15,  0, 999, 6, 6],
-      ['Cadete Negro F',           'F',   12, 15,  0, 999, 6, 6],
-      ['Junior Colores M',         'M',   16, 17,  0, 999, 0, 5],
-      ['Junior Colores F',         'F',   16, 17,  0, 999, 0, 5],
-      ['Junior Negro M',           'M',   16, 17,  0, 999, 6, 6],
-      ['Junior Negro F',           'F',   16, 17,  0, 999, 6, 6],
-      ['Senior Negro M',           'M',   18, 40,  0, 999, 6, 6],
-      ['Senior Negro F',           'F',   18, 40,  0, 999, 6, 6],
-      ['Master Negro M',           'M',   41, 99,  0, 999, 6, 6],
-      ['Master Negro F',           'F',   41, 99,  0, 999, 6, 6],
+      // belt 0-8 = colores (Blanco→Rojo-Negro), 9 = Negro
+      ['Pre-Mini Colores Mixto',   'Both', 4,  6,  0, 999, 0, 8],
+      ['Infantil A Colores M',     'M',    7,  9,  0, 999, 0, 8],
+      ['Infantil A Colores F',     'F',    7,  9,  0, 999, 0, 8],
+      ['Infantil B Colores M',     'M',   10, 11,  0, 999, 0, 8],
+      ['Infantil B Colores F',     'F',   10, 11,  0, 999, 0, 8],
+      ['Infantil Negro M',         'M',    7, 11,  0, 999, 9, 9],
+      ['Infantil Negro F',         'F',    7, 11,  0, 999, 9, 9],
+      ['Pre-Cadete Colores M',     'M',   12, 13,  0, 999, 0, 8],
+      ['Pre-Cadete Colores F',     'F',   12, 13,  0, 999, 0, 8],
+      ['Cadete Colores M',         'M',   14, 15,  0, 999, 0, 8],
+      ['Cadete Colores F',         'F',   14, 15,  0, 999, 0, 8],
+      ['Cadete Negro M',           'M',   12, 15,  0, 999, 9, 9],
+      ['Cadete Negro F',           'F',   12, 15,  0, 999, 9, 9],
+      ['Junior Colores M',         'M',   16, 17,  0, 999, 0, 8],
+      ['Junior Colores F',         'F',   16, 17,  0, 999, 0, 8],
+      ['Junior Negro M',           'M',   16, 17,  0, 999, 9, 9],
+      ['Junior Negro F',           'F',   16, 17,  0, 999, 9, 9],
+      ['Senior Negro M',           'M',   18, 40,  0, 999, 9, 9],
+      ['Senior Negro F',           'F',   18, 40,  0, 999, 9, 9],
+      ['Master Negro M',           'M',   41, 99,  0, 999, 9, 9],
+      ['Master Negro F',           'F',   41, 99,  0, 999, 9, 9],
     ];
     const seedTx = db.transaction(() => {
       for (const row of seedCategories) insertCat.run(...row);

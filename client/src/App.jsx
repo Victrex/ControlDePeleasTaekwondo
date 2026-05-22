@@ -11,6 +11,7 @@ import AthleteRegistry from './components/admin/AthleteRegistry';
 import CategoryManager from './components/admin/CategoryManager';
 import QuickCheckIn from './components/admin/QuickCheckIn';
 import BulkImport from './components/admin/BulkImport';
+import BeltConfig from './components/admin/BeltConfig';
 import PublicDisplay from './components/public/PublicDisplay';
 import Scoreboard from './components/scoreboard/Scoreboard';
 import JudgePanel from './components/judge/JudgePanel';
@@ -105,6 +106,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <BulkImport />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/belt-config" 
+            element={
+              <ProtectedRoute>
+                <BeltConfig />
               </ProtectedRoute>
             } 
           />

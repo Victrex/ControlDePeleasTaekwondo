@@ -4,29 +4,31 @@ import { ChevronLeft, Plus, Edit2, Trash2, Check, AlertCircle, Tag } from 'lucid
 import api from '../../utils/api';
 import './CategoryManager.css';
 
-const BELT_NAMES = ['Blanco', 'Amarillo', 'Naranja', 'Verde', 'Azul', 'Rojo', 'Negro'];
-const BELT_COLORS = ['#f5f5f5', '#FFD700', '#FF8C00', '#2E8B57', '#1565C0', '#C62828', '#212121'];
+const BELT_NAMES  = ['Blanco','Blanco-Amarillo','Amarillo','Naranja','Verde','Azul-Verde','Azul','Rojo','Rojo-Negro','Negro'];
+const BELT_COLORS = ['#f5f5f5','#F0E68C','#FFD700','#FF8C00','#2E8B57','#1a9e8c','#1565C0','#C62828','#850000','#212121'];
 
 const emptyForm = {
   name: '', gender: 'Both',
   min_age: 0, max_age: 99,
   min_weight: 0, max_weight: 999,
-  belt_min: 0, belt_max: 6
+  belt_min: 0, belt_max: 9
 };
 
 function BeltRange({ min, max }) {
+  // Dark belts (index >= 4) use white text; light belts (Blanco, Blanco-Amarillo, Amarillo) use dark text
+  const textColor = (i) => i <= 2 ? '#222' : '#fff';
   if (min === max) {
     return (
-      <span className="cm-belt-badge" style={{ background: BELT_COLORS[min], color: min === 6 || min === 4 ? '#fff' : '#222' }}>
+      <span className="cm-belt-badge" style={{ background: BELT_COLORS[min], color: textColor(min) }}>
         {BELT_NAMES[min]}
       </span>
     );
   }
   return (
     <span className="cm-belt-range">
-      <span className="cm-belt-badge" style={{ background: BELT_COLORS[min], color: min === 4 ? '#fff' : '#222' }}>{BELT_NAMES[min]}</span>
+      <span className="cm-belt-badge" style={{ background: BELT_COLORS[min], color: textColor(min) }}>{BELT_NAMES[min]}</span>
       <span>→</span>
-      <span className="cm-belt-badge" style={{ background: BELT_COLORS[max], color: max === 6 || max === 4 ? '#fff' : '#222' }}>{BELT_NAMES[max]}</span>
+      <span className="cm-belt-badge" style={{ background: BELT_COLORS[max], color: textColor(max) }}>{BELT_NAMES[max]}</span>
     </span>
   );
 }

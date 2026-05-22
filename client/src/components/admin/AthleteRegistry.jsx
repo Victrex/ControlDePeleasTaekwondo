@@ -4,8 +4,8 @@ import { UserPlus, Search, Edit2, Trash2, ChevronLeft, Users, Filter, X, Check, 
 import api from '../../utils/api';
 import './AthleteRegistry.css';
 
-const BELT_NAMES = ['Blanco', 'Amarillo', 'Naranja', 'Verde', 'Azul', 'Rojo', 'Negro'];
-const BELT_COLORS = ['#f5f5f5', '#FFD700', '#FF8C00', '#2E8B57', '#1565C0', '#C62828', '#212121'];
+const BELT_NAMES  = ['Blanco','Blanco-Amarillo','Amarillo','Naranja','Verde','Azul-Verde','Azul','Rojo','Rojo-Negro','Negro'];
+const BELT_COLORS = ['#f5f5f5','#F0E68C','#FFD700','#FF8C00','#2E8B57','#1a9e8c','#1565C0','#C62828','#850000','#212121'];
 
 const emptyForm = { name: '', academy: '', dob: '', weight: '', gender: '', belt: 0, license_number: '' };
 

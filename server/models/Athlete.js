@@ -1,6 +1,18 @@
 import db from '../config/database.js';
 
-export const BELT_NAMES = ['Blanco', 'Amarillo', 'Naranja', 'Verde', 'Azul', 'Rojo', 'Negro'];
+// Sistema de 10 niveles KUP (9 KUP = Blanco … 1 DAN+ = Negro)
+export const BELT_NAMES = [
+  'Blanco',         // 0 — 9 KUP
+  'Blanco-Amarillo',// 1 — 8 KUP  (también: Naranja en algunas academias)
+  'Amarillo',       // 2 — 7 KUP
+  'Naranja',        // 3 — 6 KUP
+  'Verde',          // 4 — 5 KUP
+  'Azul-Verde',     // 5 — 4 KUP
+  'Azul',           // 6 — 3 KUP
+  'Rojo',           // 7 — 2 KUP
+  'Rojo-Negro',     // 8 — 1 KUP  (Poom para menores)
+  'Negro',          // 9 — 1 DAN+
+];
 
 function calcAge(dob) {
   if (!dob) return null;

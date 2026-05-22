@@ -4,9 +4,9 @@ import { ChevronLeft, Zap, Check, AlertCircle, UserPlus, ChevronRight } from 'lu
 import api from '../../utils/api';
 import './QuickCheckIn.css';
 
-const BELT_NAMES = ['Blanco', 'Amarillo', 'Naranja', 'Verde', 'Azul', 'Rojo', 'Negro'];
-const BELT_COLORS = ['#d1d5db', '#FFD700', '#FF8C00', '#2E8B57', '#1565C0', '#C62828', '#212121'];
-const BELT_TEXT =   ['#111',   '#333',    '#fff',    '#fff',   '#fff',   '#fff',   '#fff'];
+const BELT_NAMES  = ['Blanco','Blanco-Amarillo','Amarillo','Naranja','Verde','Azul-Verde','Azul','Rojo','Rojo-Negro','Negro'];
+const BELT_COLORS = ['#d1d5db','#F0E68C','#FFD700','#FF8C00','#2E8B57','#1a9e8c','#1565C0','#C62828','#850000','#212121'];
+const BELT_TEXT   = ['#111',   '#555',   '#333',   '#fff',  '#fff',  '#fff',   '#fff',  '#fff',  '#fff',  '#fff'];
 
 const emptyForm = { name: '', academy: '', dob: '', weight: '', gender: '', belt: 0 };
 
