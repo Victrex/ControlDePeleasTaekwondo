@@ -4,10 +4,15 @@ export class Bracket {
   // Crear nueva llave para un torneo
   static create(bracketData) {
     const stmt = db.prepare(`
-      INSERT INTO brackets (tournament_id, name)
-      VALUES (?, ?)
+      INSERT INTO brackets (tournament_id, name, fixed_pista, pista_num)
+      VALUES (?, ?, ?, ?)
     `);
-    const result = stmt.run(bracketData.tournament_id, bracketData.name);
+    const result = stmt.run(
+      bracketData.tournament_id,
+      bracketData.name,
+      bracketData.fixed_pista ? 1 : 0,
+      bracketData.pista_num || 1
+    );
     return this.findById(result.lastInsertRowid);
   }
 

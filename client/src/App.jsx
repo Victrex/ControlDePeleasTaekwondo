@@ -9,7 +9,6 @@ import ScoringControl from './components/admin/ScoringControl';
 import Analytics from './components/admin/Analytics';
 import AthleteRegistry from './components/admin/AthleteRegistry';
 import CategoryManager from './components/admin/CategoryManager';
-import QuickCheckIn from './components/admin/QuickCheckIn';
 import BulkImport from './components/admin/BulkImport';
 import BeltConfig from './components/admin/BeltConfig';
 import PublicDisplay from './components/public/PublicDisplay';
@@ -90,14 +89,6 @@ function App() {
             element={
               <ProtectedRoute>
                 <CategoryManager />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/admin/quick-checkin" 
-            element={
-              <ProtectedRoute>
-                <QuickCheckIn />
               </ProtectedRoute>
             } 
           />

@@ -52,6 +52,8 @@ export default function Dashboard() {
   const [fightAthleteSearch, setFightAthleteSearch] = useState(['', '']);
   const [fightAthleteSugs, setFightAthleteSugs] = useState([[], []]);
   const [fightShowSugs, setFightShowSugs] = useState([false, false]);
+  const [fightFixedPista, setFightFixedPista] = useState(false);
+  const [fightPistaNum, setFightPistaNum] = useState(1);
   const fightSearchTimers = useRef([]);
   const BELT_NAMES_D  = ['Blanco','Blanco-Amarillo','Amarillo','Naranja','Verde','Azul-Verde','Azul','Rojo','Rojo-Negro','Negro'];
   const BELT_COLORS_D = ['#d1d5db','#F0E68C','#FFD700','#FF8C00','#2E8B57','#1a9e8c','#1565C0','#C62828','#850000','#212121'];
@@ -86,6 +88,7 @@ export default function Dashboard() {
   const resetFightModal = () => {
     setCompetitors([{ name:'', academy:'', athlete_id:null },{ name:'', academy:'', athlete_id:null }]);
     setFightAthleteSearch(['','']); setFightAthleteSugs([[],[]]); setFightShowSugs([false,false]);
+    setFightFixedPista(false); setFightPistaNum(1);
   };
 
   useEffect(() => {
@@ -198,7 +201,9 @@ export default function Dashboard() {
       // Crear la llave (bracket) sin generar peleas todavía
       const bracketRes = await api.createBracket({
         tournament_id: selectedTournament.id,
-        name: bracketName
+        name: bracketName,
+        fixed_pista: fightFixedPista ? 1 : 0,
+        pista_num: fightFixedPista ? fightPistaNum : 1
       });
       const newBracket = bracketRes.bracket || bracketRes;
       // Agregar todos los competidores a la llave
@@ -399,9 +404,6 @@ export default function Dashboard() {
           </button>
           <button onClick={() => navigate('/admin/athletes')} className="btn-awards" style={{ background: 'rgba(59,130,246,.2)', borderColor: '#3b82f6', color: '#93c5fd' }}>
             <Users size={14} /> Atletas
-          </button>
-          <button onClick={() => navigate('/admin/quick-checkin')} className="btn-awards" style={{ background: 'rgba(245,158,11,.2)', borderColor: '#f59e0b', color: '#fcd34d' }}>
-            <Zap size={14} /> Check-In
           </button>
           <button onClick={() => navigate('/admin/categories')} className="btn-awards" style={{ background: 'rgba(124,58,237,.2)', borderColor: '#7c3aed', color: '#a78bfa' }}>
             <Tag size={14} /> Categorías
@@ -981,14 +983,14 @@ export default function Dashboard() {
                             padding:'10px 12px 10px 32px', fontSize:14, boxSizing:'border-box'
                           }}
                         />
-                        {/* Dropdown */}
-                        {fightShowSugs[idx] && (fightAthleteSearch[idx]?.length >= 2) && (
+                        {/* Dropdown - solo cuando hay resultados */}
+                        {fightShowSugs[idx] && (fightAthleteSearch[idx]?.length >= 2) && fightAthleteSugs[idx]?.length > 0 && (
                           <div onMouseDown={e => e.preventDefault()} style={{
                             position:'absolute', top:'100%', left:0, right:0, zIndex:300,
                             background:'#1e293b', border:'1px solid #334155', borderRadius:10,
                             boxShadow:'0 8px 32px rgba(0,0,0,0.5)', maxHeight:220, overflowY:'auto', marginTop:3
                           }}>
-                            {fightAthleteSugs[idx]?.length > 0 ? fightAthleteSugs[idx].map(a => (
+                            {fightAthleteSugs[idx].map(a => (
                               <div key={a.id} onClick={() => handleSelectFightAthlete(idx, a)}
                                 style={{display:'flex', alignItems:'center', gap:8, padding:'10px 14px', cursor:'pointer', borderBottom:'1px solid #0f172a'}}
                                 onMouseEnter={e=>e.currentTarget.style.background='#334155'}
@@ -1002,25 +1004,7 @@ export default function Dashboard() {
                                 {a.academy && <span style={{color:'#64748b', fontSize:12}}>{a.academy}</span>}
                                 {a.weight && <span style={{color:'#94a3b8', fontSize:11, marginLeft:4}}>{a.weight} kg</span>}
                               </div>
-                            )) : (
-                              <div style={{padding:'12px 14px', color:'#94a3b8', fontSize:13, display:'flex', flexDirection:'column', gap:8}}>
-                                <span>No existe en el registro</span>
-                                {comp.academy?.trim() ? (
-                                  <button type="button"
-                                    onMouseDown={async (e) => {
-                                      e.preventDefault();
-                                      try {
-                                        const created = await api.createAthlete({ name: fightAthleteSearch[idx].trim(), academy: comp.academy });
-                                        handleSelectFightAthlete(idx, created);
-                                      } catch(err) { alert('Error: ' + err.message); }
-                                    }}
-                                    style={{background:'rgba(100,116,139,0.2)', border:'1px solid #475569', color:'#cbd5e1', padding:'6px 12px', borderRadius:6, cursor:'pointer', fontSize:12, fontWeight:600, alignSelf:'flex-start'}}
-                                  >+ Crear en registro y agregar</button>
-                                ) : (
-                                  <span style={{fontSize:11, color:'#475569'}}>Llena la academia para poder crear el registro</span>
-                                )}
-                              </div>
-                            )}
+                            ))}
                           </div>
                         )}
                       </div>
@@ -1047,6 +1031,26 @@ export default function Dashboard() {
                       {!comp.athlete_id && comp.name && (
                         <div style={{color:'#64748b', fontSize:12, marginTop:7}}>Sin vincular — escribe 2+ letras para buscar</div>
                       )}
+
+                      {/* No existe en el registro — debajo de ambos inputs */}
+                      {fightShowSugs[idx] && (fightAthleteSearch[idx]?.length >= 2) && fightAthleteSugs[idx]?.length === 0 && !comp.athlete_id && (
+                        <div style={{marginTop:8, padding:'10px 12px', background:'rgba(100,116,139,0.08)', border:'1px solid #334155', borderRadius:8, color:'#94a3b8', fontSize:13, display:'flex', flexDirection:'column', gap:7}}>
+                          <span>No existe en el registro</span>
+                          {comp.academy?.trim() ? (
+                            <button type="button"
+                              onClick={async () => {
+                                try {
+                                  const created = await api.createAthlete({ name: fightAthleteSearch[idx].trim(), academy: comp.academy });
+                                  handleSelectFightAthlete(idx, created);
+                                } catch(err) { alert('Error: ' + err.message); }
+                              }}
+                              style={{background:'rgba(100,116,139,0.2)', border:'1px solid #475569', color:'#cbd5e1', padding:'6px 12px', borderRadius:6, cursor:'pointer', fontSize:12, fontWeight:600, alignSelf:'flex-start'}}
+                            >+ Crear en registro y agregar</button>
+                          ) : (
+                            <span style={{fontSize:11, color:'#475569'}}>Llena la academia para poder crear el registro</span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -1068,6 +1072,33 @@ export default function Dashboard() {
                 onMouseEnter={e=>{e.currentTarget.style.borderColor='#475569'; e.currentTarget.style.color='#94a3b8';}}
                 onMouseLeave={e=>{e.currentTarget.style.borderColor='#334155'; e.currentTarget.style.color='#64748b';}}
               >+ Agregar Peleador</button>
+
+              {/* Pista fija */}
+              <div style={{ marginTop:14, padding:'12px 14px', background:'rgba(255,255,255,0.03)', border:'1px solid #1e293b', borderRadius:10 }}>
+                <label style={{ display:'flex', alignItems:'center', gap:10, cursor:'pointer', userSelect:'none' }}>
+                  <div
+                    onClick={() => setFightFixedPista(v => !v)}
+                    style={{ position:'relative', width:36, height:20, background: fightFixedPista ? '#3b82f6' : '#334155', borderRadius:10, transition:'background 0.2s', flexShrink:0, cursor:'pointer' }}
+                  >
+                    <div style={{ position:'absolute', top:2, left: fightFixedPista ? 18 : 2, width:16, height:16, background:'#fff', borderRadius:'50%', transition:'left 0.2s' }} />
+                  </div>
+                  <span style={{ fontSize:13, color:'#cbd5e1', fontWeight:500 }}>Asignar todas las peleas a una pista fija</span>
+                </label>
+                {fightFixedPista && (
+                  <div style={{ marginTop:10, display:'flex', alignItems:'center', gap:8 }}>
+                    <span style={{ fontSize:13, color:'#94a3b8' }}>Pista:</span>
+                    <select
+                      value={fightPistaNum}
+                      onChange={e => setFightPistaNum(Number(e.target.value))}
+                      style={{ background:'#0f172a', border:'1px solid #334155', color:'#e2e8f0', borderRadius:6, padding:'5px 10px', fontSize:13, cursor:'pointer' }}
+                    >
+                      {Array.from({ length: selectedTournament?.num_pistas || 1 }, (_, i) => (
+                        <option key={i+1} value={i+1}>Pista {i+1}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
 
               {/* Botones acción */}
               <div style={{display:'flex', gap:10, marginTop:16, justifyContent:'flex-end', flexWrap:'wrap'}}>

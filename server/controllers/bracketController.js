@@ -75,8 +75,8 @@ export const bracketController = {
 
       const matches = Bracket.generateBracketStructure(bracketIdInt);
       
-      // Obtener el tournament_id del bracket
-      const bracket = db.prepare('SELECT tournament_id FROM brackets WHERE id = ?').get(bracketIdInt);
+      // Obtener el tournament_id y configuración de pista del bracket
+      const bracket = db.prepare('SELECT tournament_id, fixed_pista, pista_num FROM brackets WHERE id = ?').get(bracketIdInt);
       
       console.log('Matches generados:', matches.length);
       console.log('Primera ronda matches:', matches.filter(m => m.round === 1));
@@ -108,7 +108,8 @@ export const bracketController = {
               competitor_blue: match.competitor2_name,
               academy_red: match.competitor1_academy || '',
               academy_blue: match.competitor2_academy || '',
-              category: 'Bracket'
+              category: 'Bracket',
+              ...(bracket.fixed_pista ? { pista: bracket.pista_num } : {})
             });
             console.log('Pelea creada:', newFight.id);
           } else {
@@ -191,7 +192,7 @@ export const bracketController = {
       if (result.nextMatchReady) {
         const nextMatch = result.nextMatchReady;
         // Obtener el tournament_id del bracket
-        const bracket = db.prepare('SELECT tournament_id FROM brackets WHERE id = ?').get(result.bracket_id);
+        const bracket = db.prepare('SELECT tournament_id, fixed_pista, pista_num FROM brackets WHERE id = ?').get(result.bracket_id);
         
         if (bracket) {
           // Crear nueva pelea con los competidores del siguiente match
@@ -201,7 +202,8 @@ export const bracketController = {
             competitor_red: nextMatch.competitor1_name,
             competitor_blue: nextMatch.competitor2_name,
             academy_red: nextMatch.competitor1_academy || '',
-            academy_blue: nextMatch.competitor2_academy || ''
+            academy_blue: nextMatch.competitor2_academy || '',
+            ...(bracket.fixed_pista ? { pista: bracket.pista_num } : {})
           });
           
           res.json({ 

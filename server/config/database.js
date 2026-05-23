@@ -302,6 +302,12 @@ export function initializeDatabase() {
   try {
     db.exec(`ALTER TABLE scoring_config ADD COLUMN min_judges_agree INTEGER NOT NULL DEFAULT 0`);
   } catch (e) {}
+  try {
+    db.exec(`ALTER TABLE brackets ADD COLUMN fixed_pista INTEGER NOT NULL DEFAULT 0`);
+  } catch (e) {}
+  try {
+    db.exec(`ALTER TABLE brackets ADD COLUMN pista_num INTEGER NOT NULL DEFAULT 1`);
+  } catch (e) {}
 
   // ── Migración v1: sistema de 10 niveles KUP (belt 0-9) ─────────────────────
   // Remapeo: 0→0, 1(Amarillo)→2, 2(Naranja)→3, 3(Verde)→4, 4(Azul)→6, 5(Rojo)→7, 6(Negro)→9
