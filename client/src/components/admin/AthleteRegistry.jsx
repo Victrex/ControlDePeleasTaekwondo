@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UserPlus, Search, Edit2, Trash2, ChevronLeft, Users, Filter, X, Check, AlertCircle } from 'lucide-react';
 import api from '../../utils/api';
+import { loadBeltConfig } from '../../utils/beltConfig';
 import './AthleteRegistry.css';
 
-const BELT_NAMES  = ['Blanco','Blanco-Amarillo','Amarillo','Naranja','Verde','Azul-Verde','Azul','Rojo','Rojo-Negro','Negro'];
-const BELT_COLORS = ['#f5f5f5','#F0E68C','#FFD700','#FF8C00','#2E8B57','#1a9e8c','#1565C0','#C62828','#850000','#212121'];
 
 const emptyForm = { name: '', academy: '', dob: '', weight: '', gender: '', belt: 0, license_number: '' };
 
@@ -21,6 +20,10 @@ function calcAge(dob) {
 
 export default function AthleteRegistry() {
   const navigate = useNavigate();
+  const beltCfg = useMemo(() => loadBeltConfig(), []);
+  const BELT_NAMES  = useMemo(() => beltCfg.map(b => b.name), [beltCfg]);
+  const BELT_COLORS = useMemo(() => beltCfg.map(b => b.color), [beltCfg]);
+  const BELT_TEXT   = useMemo(() => beltCfg.map(b => b.textColor || '#222'), [beltCfg]);
   const [athletes, setAthletes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -194,7 +197,7 @@ export default function AthleteRegistry() {
                   <td>
                     <span
                       className="ar-belt-badge"
-                      style={{ background: BELT_COLORS[a.belt ?? 0], color: a.belt === 6 || a.belt === 4 || a.belt === 2 ? '#fff' : '#222' }}
+                      style={{ background: BELT_COLORS[a.belt ?? 0], color: BELT_TEXT[a.belt ?? 0] }}
                     >
                       {BELT_NAMES[a.belt ?? 0]}
                     </span>
