@@ -61,9 +61,9 @@ export function initializeSocket(server) {
         return;
       }
       try {
-        const { fightId, judgeId, team, action } = data;
+        const { fightId, judgeId, judgeName, team, action } = data;
         if (!fightId || !judgeId || !team || !action) return;
-        svc.processJudgeInput(fightId, judgeId, team, action, Date.now());
+        svc.processJudgeInput(fightId, judgeId, team, action, Date.now(), judgeName);
       } catch (error) {
         console.error('Error processing judge input:', error.message);
       }

@@ -34,6 +34,11 @@ export default function JudgePanel() {
   const judgeId = parseInt(searchParams.get('judgeId') || '1');
   const { socket, connected } = useSocket();
 
+  const defaultName = searchParams.get('judgeName') || localStorage.getItem(`judgeName_${judgeId}`) || `Juez ${judgeId}`;
+  const [judgeName, setJudgeName] = useState(defaultName);
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState(defaultName);
+
   const [fight, setFight] = useState(null);
   const [config, setConfig] = useState(null);
   const [timer, setTimer] = useState({ remainingMs: 0, round: 1, running: false });
@@ -113,6 +118,9 @@ export default function JudgePanel() {
   }, [socket, fightId, judgeId]);
 
   // Send input via WebSocket
+  const judgeNameRef = useRef(judgeName);
+  judgeNameRef.current = judgeName;
+
   const sendInput = useCallback((team, action) => {
     if (!socket || !fightId) return;
     const key = `${team}-${action}`;
@@ -120,7 +128,7 @@ export default function JudgePanel() {
     if (lastButtonPress.current[key] && (now - lastButtonPress.current[key]) < ANTI_SPAM_MS) return;
     lastButtonPress.current[key] = now;
 
-    socket.emit('judge:input', { fightId: parseInt(fightId), judgeId, team, action });
+    socket.emit('judge:input', { fightId: parseInt(fightId), judgeId, judgeName: judgeNameRef.current, team, action });
 
     // Visual feedback
     const entry = { team, action, time: now };
@@ -212,7 +220,19 @@ export default function JudgePanel() {
     <div className="judge-panel">
       {/* Header */}
       <div className="jp-header">
-        <div className="jp-judge-id">Juez {judgeId}</div>
+        <div className="jp-judge-id" style={{ cursor: 'pointer' }} onDoubleClick={() => { setNameInput(judgeName); setEditingName(true); }} title="Doble clic para editar nombre">
+        {editingName ? (
+          <form style={{ display: 'inline' }} onSubmit={(e) => { e.preventDefault(); const n = nameInput.trim() || `Juez ${judgeId}`; setJudgeName(n); localStorage.setItem(`judgeName_${judgeId}`, n); setEditingName(false); }}>
+            <input
+              autoFocus
+              value={nameInput}
+              onChange={e => setNameInput(e.target.value)}
+              onBlur={() => { const n = nameInput.trim() || `Juez ${judgeId}`; setJudgeName(n); localStorage.setItem(`judgeName_${judgeId}`, n); setEditingName(false); }}
+              style={{ width: '100px', fontSize: 'inherit', fontWeight: 'inherit', background: '#333', color: '#fff', border: '1px solid #aaa', borderRadius: 4, padding: '0 4px' }}
+            />
+          </form>
+        ) : judgeName}
+      </div>
         <div className="jp-timer">
           <span className={timer.running ? 'jp-timer-live' : 'jp-timer-paused'}>
             {formatTime(timer.remainingMs)}

@@ -187,6 +187,26 @@
   100% { transform: scale(1); }
 }
 
+.sc-gp-judge-name-input {
+  flex-shrink: 0;
+  width: 110px;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid #4a5568;
+  border-radius: 5px;
+  color: #e2e8f0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.3rem 0.5rem;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.sc-gp-judge-name-input:focus {
+  border-color: #48bb78;
+}
+.sc-gp-judge-name-input::placeholder {
+  color: #718096;
+}
+
 .sc-gp-assign-btn {
   flex-shrink: 0;
   border: none;
@@ -235,6 +255,29 @@
   background: rgba(214, 158, 46, 0.2);
   border-color: #d69e2e;
   color: #ecc94b;
+}
+
+.sc-gp-gam-btn {
+  flex-shrink: 0;
+  border: 1px solid #4a5568;
+  border-radius: 6px;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  background: #2d3748;
+  color: #a0aec0;
+  transition: all 0.15s;
+  letter-spacing: 0.04em;
+}
+.sc-gp-gam-btn:hover {
+  border-color: #e53e3e;
+  color: #fc8181;
+}
+.sc-gp-gam-active {
+  background: rgba(229, 62, 62, 0.2);
+  border-color: #e53e3e;
+  color: #fc8181;
 }
 
 .sc-judges-warn-msg {

@@ -69,9 +69,13 @@ export default function ScoringControl() {
   // Gamepad / Judge management
   const [detectedGamepads, setDetectedGamepads] = useState([]); // [{index, id, name}]
   const [assignedJudges, setAssignedJudges] = useState({}); // {gamepadIndex: judgeId}
+  const [judgeNames, setJudgeNames] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('sc_judgeNames') || '{}'); } catch { return {}; }
+  }); // {judgeId: name}
   const [judgeLastInput, setJudgeLastInput] = useState({}); // {judgeId: {team, action, time}}
   const [gamJeomByRound, setGamJeomByRound] = useState({}); // {round: {red: n, blue: n}}
   const [mainGamepad, setMainGamepad] = useState(null); // gamepad index designated as main controller
+  const [gamJeomGamepads, setGamJeomGamepads] = useState({}); // {gamepadIndex: true} — can add gam-jeoms
   const lastButtonPress = useRef({}); // anti-spam per gamepad+button
   const prevButtonStates = useRef({}); // track previous button states per gamepad
   const animFrameRef = useRef(null);
@@ -80,6 +84,10 @@ export default function ScoringControl() {
   fightIdRef.current = fightId;
   const assignedJudgesRef = useRef(assignedJudges);
   assignedJudgesRef.current = assignedJudges;
+  const judgeNamesRef = useRef(judgeNames);
+  judgeNamesRef.current = judgeNames;
+  const gamJeomGamepadsRef = useRef(gamJeomGamepads);
+  gamJeomGamepadsRef.current = gamJeomGamepads;
   const mainGamepadRef = useRef(mainGamepad);
   mainGamepadRef.current = mainGamepad;
   const timerRunningRef = useRef(timer.running);
@@ -137,6 +145,11 @@ export default function ScoringControl() {
         delete next[e.gamepad.index];
         return next;
       });
+      setGamJeomGamepads(prev => {
+        const next = { ...prev };
+        delete next[e.gamepad.index];
+        return next;
+      });
     };
 
     window.addEventListener('gamepadconnected', handleConnect);
@@ -158,6 +171,7 @@ export default function ScoringControl() {
       });
 
       const assigned = assignedJudgesRef.current;
+      const gamJeomCtrl = gamJeomGamepadsRef.current;
       const mainGpIdx = mainGamepadRef.current;
       const now = Date.now();
 
@@ -186,7 +200,10 @@ export default function ScoringControl() {
         }
 
         const judgeId = assigned[gp.index];
-        if (!judgeId) continue; // not assigned as judge
+        const isGamJeomCtrl = !!gamJeomCtrl[gp.index];
+
+        // Skip if this gamepad has no active role
+        if (!judgeId && !isGamJeomCtrl) continue;
 
         for (let bi = 0; bi < gp.buttons.length; bi++) {
           const pressed = gp.buttons[bi].pressed;
@@ -199,20 +216,26 @@ export default function ScoringControl() {
               if (!lastButtonPress.current[spamKey] || (now - lastButtonPress.current[spamKey]) >= ANTI_SPAM_MS) {
                 lastButtonPress.current[spamKey] = now;
                 if (mapped.action === 'gam_jeom') {
-                  // Gam-jeom goes through admin API, not judge consensus
-                  api.addGamJeom(fightIdRef.current, mapped.team).catch(() => {});
-                } else if (socket) {
+                  // Only gamepads with GAM role can add gam-jeoms, and only when timer is paused
+                  if (isGamJeomCtrl && !timerRunningRef.current) {
+                    api.addGamJeom(fightIdRef.current, mapped.team).catch(() => {});
+                  }
+                } else if (judgeId && socket) {
+                  // Scoring actions go through judge consensus
                   socket.emit('judge:input', {
                     fightId: parseInt(fightIdRef.current),
                     judgeId,
+                    judgeName: judgeNamesRef.current[judgeId] || `Juez ${judgeId}`,
                     team: mapped.team,
                     action: mapped.action
                   });
                 }
-                setJudgeLastInput(prev => ({
-                  ...prev,
-                  [judgeId]: { team: mapped.team, action: mapped.action, time: now }
-                }));
+                if (judgeId) {
+                  setJudgeLastInput(prev => ({
+                    ...prev,
+                    [judgeId]: { team: mapped.team, action: mapped.action, time: now }
+                  }));
+                }
               }
             }
           }
@@ -416,6 +439,7 @@ export default function ScoringControl() {
 
   // Gam-jeom
   async function handleGamJeom(team) {
+    if (timer.running) return;
     try { await api.addGamJeom(fightId, team); } catch (e) { alert(e.message); }
   }
   async function handleRemoveGamJeom(team) {
@@ -579,6 +603,22 @@ export default function ScoringControl() {
                       <span className="sc-gp-idx">Slot #{gp.index}</span>
                     </div>
                   </div>
+                  {judgeId && (
+                    <input
+                      className="sc-gp-judge-name-input"
+                      value={judgeNames[judgeId] || ''}
+                      placeholder={`Juez ${judgeId}`}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setJudgeNames(prev => {
+                          const next = { ...prev, [judgeId]: val };
+                          localStorage.setItem('sc_judgeNames', JSON.stringify(next));
+                          return next;
+                        });
+                      }}
+                      title="Nombre del juez (se muestra en el marcador)"
+                    />
+                  )}
                   <div className="sc-gp-status">
                     {judgeId && lastInput && isRecent && (
                       <span className={`sc-gp-last-input sc-gp-input-${lastInput.team}`}>
@@ -598,6 +638,18 @@ export default function ScoringControl() {
                     title="Mando principal (Options = Shi-jak/Galyo)"
                   >
                     {mainGamepad === gp.index ? <><Crown size={12} /> Main</> : <><Gamepad2 size={12} /> Main</>}
+                  </button>
+                  <button
+                    className={`sc-gp-gam-btn ${gamJeomGamepads[gp.index] ? 'sc-gp-gam-active' : ''}`}
+                    onClick={() => setGamJeomGamepads(prev => {
+                      const next = { ...prev };
+                      if (next[gp.index]) delete next[gp.index];
+                      else next[gp.index] = true;
+                      return next;
+                    })}
+                    title="Activar para que B/Y agreguen Gam-jeom"
+                  >
+                    GAM
                   </button>
                 </div>
               );

@@ -6,7 +6,7 @@ import { timerService } from './timerService.js';
 
 export const scoringService = {
 
-  processJudgeInput(fightId, judgeId, team, action, timestamp) {
+  processJudgeInput(fightId, judgeId, team, action, timestamp, judgeName) {
     const fight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
     if (!fight) throw new Error('Pelea no encontrada');
     if (fight.status !== 'current') throw new Error('La pelea no está en curso');
@@ -41,7 +41,9 @@ export const scoringService = {
       action,
       judgeCount: uniqueJudges.size,
       needed: majority,
-      round
+      round,
+      judgeId,
+      judgeName: judgeName || `Juez ${judgeId}`,
     });
 
     if (uniqueJudges.size >= majority) {

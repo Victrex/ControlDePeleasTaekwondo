@@ -61,7 +61,7 @@ export default function Scoreboard() {
   const [roundWinners, setRoundWinners] = useState({});
   const [fightResult, setFightResult] = useState(null);
   // Judge vote visualization
-  const [judgeVote, setJudgeVote] = useState(null); // {team, action, judgeCount, needed, awarded}
+  const [judgeVote, setJudgeVote] = useState(null); // {team, action, judgeCount, needed, awarded, judgeName}
   // Rest timer
   const [restMs, setRestMs] = useState(0);
   const [showingRest, setShowingRest] = useState(false);
@@ -129,7 +129,7 @@ export default function Scoreboard() {
       });
       setTimeout(() => setLastAction(null), 2000);
       // Show awarded vote as green
-      showJudgeVote(data.team, data.action, -1, -1, true);
+      showJudgeVote(data.team, data.action, -1, -1, true, null);
     };
 
     const handleScoreEdited = (data) => {
@@ -267,6 +267,7 @@ export default function Scoreboard() {
         data.judgeCount,
         data.needed,
         false,
+        data.judgeName,
       );
     };
 
@@ -356,9 +357,9 @@ export default function Scoreboard() {
     }
   }
 
-  function showJudgeVote(team, action, judgeCount, needed, awarded) {
+  function showJudgeVote(team, action, judgeCount, needed, awarded, judgeName) {
     if (judgeVoteTimer.current) clearTimeout(judgeVoteTimer.current);
-    setJudgeVote({ team, action, judgeCount, needed, awarded });
+    setJudgeVote({ team, action, judgeCount, needed, awarded, judgeName });
     judgeVoteTimer.current = setTimeout(
       () => setJudgeVote(null),
       awarded ? 2500 : 1800,
@@ -515,13 +516,18 @@ export default function Scoreboard() {
             <div
               className={`sb-judge-vote ${judgeVote.awarded ? "sb-vote-awarded" : "sb-vote-pending"}`}
             >
-              <span className="sb-vote-icon">
-                {ACTION_ICONS[judgeVote.action] || <Zap size={14} />}
-              </span>
-              {judgeVote.awarded ? (
-                <span className="sb-vote-plus">+</span>
-              ) : (
-                <span className="sb-vote-count">{judgeVote.judgeCount}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span className="sb-vote-icon">
+                  {ACTION_ICONS[judgeVote.action] || <Zap size={14} />}
+                </span>
+                {judgeVote.awarded ? (
+                  <span className="sb-vote-plus">+</span>
+                ) : (
+                  <span className="sb-vote-count">{judgeVote.judgeCount}</span>
+                )}
+              </div>
+              {judgeVote.judgeName && (
+                <span className="sb-vote-judge-name">{judgeVote.judgeName}</span>
               )}
             </div>
           )}
@@ -596,13 +602,18 @@ export default function Scoreboard() {
             <div
               className={`sb-judge-vote ${judgeVote.awarded ? "sb-vote-awarded" : "sb-vote-pending"}`}
             >
-              <span className="sb-vote-icon">
-                {ACTION_ICONS[judgeVote.action] || <Zap size={14} />}
-              </span>
-              {judgeVote.awarded ? (
-                <span className="sb-vote-plus">+</span>
-              ) : (
-                <span className="sb-vote-count">{judgeVote.judgeCount}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span className="sb-vote-icon">
+                  {ACTION_ICONS[judgeVote.action] || <Zap size={14} />}
+                </span>
+                {judgeVote.awarded ? (
+                  <span className="sb-vote-plus">+</span>
+                ) : (
+                  <span className="sb-vote-count">{judgeVote.judgeCount}</span>
+                )}
+              </div>
+              {judgeVote.judgeName && (
+                <span className="sb-vote-judge-name">{judgeVote.judgeName}</span>
               )}
             </div>
           )}
