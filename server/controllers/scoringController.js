@@ -189,7 +189,15 @@ export const scoringController = {
       if (![1, 2, 3].includes(round)) return res.status(400).json({ error: 'Round inválido' });
 
       const col = `round_${round}_winner`;
-      db.prepare(`UPDATE fights SET ${col} = ? WHERE id = ?`).run(winner, fightId);
+      const reasonCol = `round_${round}_reason`;
+      // If this round was tie_unresolved, mark it as referee_decision now that admin chose
+      const existingFight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
+      const existingReason = existingFight ? existingFight[reasonCol] : null;
+      if (existingReason === 'tie_unresolved') {
+        db.prepare(`UPDATE fights SET ${col} = ?, ${reasonCol} = 'referee_decision' WHERE id = ?`).run(winner, fightId);
+      } else {
+        db.prepare(`UPDATE fights SET ${col} = ? WHERE id = ?`).run(winner, fightId);
+      }
 
       let fight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
 

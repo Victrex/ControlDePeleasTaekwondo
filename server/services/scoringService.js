@@ -16,7 +16,7 @@ export const scoringService = {
     const round = fight.current_round;
 
     // Save raw judge input
-    Score.addJudgeInput({ fight_id: fightId, judge_id: judgeId, round, team, action, timestamp });
+    Score.addJudgeInput({ fight_id: fightId, judge_id: judgeId, round, team, action, timestamp, judge_name: judgeName || null });
 
     // Clean expired inputs
     const windowStart = timestamp - config.judge_window_ms;

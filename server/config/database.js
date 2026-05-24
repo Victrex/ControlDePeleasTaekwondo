@@ -308,6 +308,18 @@ export function initializeDatabase() {
   try {
     db.exec(`ALTER TABLE brackets ADD COLUMN pista_num INTEGER NOT NULL DEFAULT 1`);
   } catch (e) {}
+  try {
+    db.exec(`ALTER TABLE judge_inputs ADD COLUMN judge_name TEXT`);
+  } catch (e) {}
+  try {
+    db.exec(`ALTER TABLE fights ADD COLUMN round_1_reason TEXT`);
+  } catch (e) {}
+  try {
+    db.exec(`ALTER TABLE fights ADD COLUMN round_2_reason TEXT`);
+  } catch (e) {}
+  try {
+    db.exec(`ALTER TABLE fights ADD COLUMN round_3_reason TEXT`);
+  } catch (e) {}
 
   // ── Migración v1: sistema de 10 niveles KUP (belt 0-9) ─────────────────────
   // Remapeo: 0→0, 1(Amarillo)→2, 2(Naranja)→3, 3(Verde)→4, 4(Azul)→6, 5(Rojo)→7, 6(Negro)→9

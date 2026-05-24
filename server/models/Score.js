@@ -26,15 +26,23 @@ export class Score {
 
   static getBreakdown(fightId) {
     const scores = this.getByFight(fightId);
+    const missed = this.getMissedInputsByFight(fightId);
     const breakdown = { rounds: {}, totals: { red: 0, blue: 0 } };
 
     for (const s of scores) {
       if (!breakdown.rounds[s.round]) {
-        breakdown.rounds[s.round] = { red: 0, blue: 0, events: [] };
+        breakdown.rounds[s.round] = { red: 0, blue: 0, events: [], missedVotes: [] };
       }
       breakdown.rounds[s.round][s.team] += s.points;
       breakdown.rounds[s.round].events.push(s);
       breakdown.totals[s.team] += s.points;
+    }
+
+    for (const m of missed) {
+      if (!breakdown.rounds[m.round]) {
+        breakdown.rounds[m.round] = { red: 0, blue: 0, events: [], missedVotes: [] };
+      }
+      breakdown.rounds[m.round].missedVotes.push(m);
     }
 
     return breakdown;
@@ -78,10 +86,10 @@ export class Score {
 
   static addJudgeInput(data) {
     const stmt = db.prepare(`
-      INSERT INTO judge_inputs (fight_id, judge_id, round, team, action, timestamp)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO judge_inputs (fight_id, judge_id, round, team, action, timestamp, judge_name)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
-    const result = stmt.run(data.fight_id, data.judge_id, data.round, data.team, data.action, data.timestamp);
+    const result = stmt.run(data.fight_id, data.judge_id, data.round, data.team, data.action, data.timestamp, data.judge_name || null);
     return { id: result.lastInsertRowid, ...data };
   }
 
@@ -102,5 +110,9 @@ export class Score {
   static cleanExpiredInputs(fightId, beforeTimestamp) {
     // Mark as processed=2 (expired/missed) instead of deleting — preserves data for analytics
     db.prepare('UPDATE judge_inputs SET processed = 2 WHERE fight_id = ? AND processed = 0 AND timestamp < ?').run(fightId, beforeTimestamp);
+  }
+
+  static getMissedInputsByFight(fightId) {
+    return db.prepare('SELECT * FROM judge_inputs WHERE fight_id = ? AND processed = 2 ORDER BY timestamp ASC').all(fightId);
   }
 }

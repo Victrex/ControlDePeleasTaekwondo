@@ -57,6 +57,7 @@ export default function ScoringControl() {
   const [gamJeomBlue, setGamJeomBlue] = useState(0);
   const [breakdown, setBreakdown] = useState(null);
   const [roundWinners, setRoundWinners] = useState({});
+  const [roundReasons, setRoundReasons] = useState({});
   const [customTime, setCustomTime] = useState('');
   const [customMinutes, setCustomMinutes] = useState('');
   const [customSeconds, setCustomSeconds] = useState('');
@@ -64,6 +65,9 @@ export default function ScoringControl() {
   const [editScoreRed, setEditScoreRed] = useState('');
   const [loading, setLoading] = useState(false);
   const [kyeShieActive, setKyeShieActive] = useState(false);
+  // Tie-breaker modal
+  const [tieModal, setTieModal] = useState({ open: false, round: null });
+
   // Next fight modal
   const [showNextFightModal, setShowNextFightModal] = useState(false);
   const [pendingFights, setPendingFights] = useState([]);
@@ -124,6 +128,11 @@ export default function ScoringControl() {
         1: data.fight.round_1_winner,
         2: data.fight.round_2_winner,
         3: data.fight.round_3_winner
+      });
+      setRoundReasons({
+        1: data.fight.round_1_reason,
+        2: data.fight.round_2_reason,
+        3: data.fight.round_3_reason,
       });
     } catch (err) {
       console.error('Error loading scoring state:', err);
@@ -390,6 +399,20 @@ export default function ScoringControl() {
           2: d.round_2_winner,
           3: d.round_3_winner,
         });
+        setRoundReasons({
+          1: d.round_1_reason,
+          2: d.round_2_reason,
+          3: d.round_3_reason,
+        });
+        // If a round just landed on tie_unresolved, open the choose-winner modal
+        const reasons = [d.round_1_reason, d.round_2_reason, d.round_3_reason];
+        const winners = [d.round_1_winner, d.round_2_winner, d.round_3_winner];
+        for (let i = 0; i < 3; i++) {
+          if (reasons[i] === 'tie_unresolved' && !winners[i]) {
+            setTieModal({ open: true, round: i + 1 });
+            break;
+          }
+        }
         loadBreakdown();
       }
     };
@@ -477,6 +500,11 @@ export default function ScoringControl() {
     try {
       await api.setRoundWinner(fightId, round, winner);
       setRoundWinners(prev => ({ ...prev, [round]: winner }));
+      setRoundReasons(prev => {
+        const cur = prev[round];
+        return { ...prev, [round]: cur === 'tie_unresolved' ? 'referee_decision' : cur };
+      });
+      setTieModal({ open: false, round: null });
     } catch (e) { alert(e.message); }
   }
 
@@ -879,15 +907,30 @@ export default function ScoringControl() {
       {/* Score events */}
       <div className="sc-breakdown">
         <h3>Eventos de Puntuación</h3>
-        {breakdown && Object.entries(breakdown.rounds).map(([roundNum, rd]) => (
+        {breakdown && Object.entries(breakdown.rounds).map(([roundNum, rd]) => {
+          const reason = roundReasons[parseInt(roundNum)];
+          const winner = roundWinners[parseInt(roundNum)];
+          let chipText = null;
+          let chipWarn = false;
+          if (reason === 'tiebreak_phase1') chipText = 'Empate — Fase 1: Sin gam-jeom';
+          else if (reason === 'tiebreak_phase2') chipText = 'Empate — Fase 2: Patadas a la cabeza';
+          else if (reason === 'tiebreak_phase3') chipText = 'Empate — Fase 3: Votos no confirmados';
+          else if (reason === 'referee_decision') chipText = 'Empate — Decisión del árbitro';
+          else if (reason === 'tie_unresolved' && !winner) { chipText = '⚠ Empate sin resolver — elige ganador arriba'; chipWarn = true; }
+          else if (reason === 'tie_unresolved' && winner) chipText = 'Empate — Decisión del árbitro';
+          return (
           <div key={roundNum} className="sc-bd-round">
             <h4>Round {roundNum} — Azul: {rd.blue} | Rojo: {rd.red}</h4>
+            {chipText && (
+              <div className={`sc-tiebreak-chip${chipWarn ? ' sc-tiebreak-chip-warn' : ''}`}>{chipText}</div>
+            )}
             <table className="sc-bd-table">
               <thead>
                 <tr>
                   <th>Equipo</th>
                   <th>Acción</th>
                   <th>Pts</th>
+                  <th>Juez</th>
                   <th></th>
                 </tr>
               </thead>
@@ -897,6 +940,7 @@ export default function ScoringControl() {
                     <td>{ev.team === 'red' ? <Circle size={9} fill="#ef4444" color="#ef4444" /> : <Circle size={9} fill="#3b82f6" color="#3b82f6" />}</td>
                     <td>{ACTION_LABELS[ev.action] || ev.action}</td>
                     <td>{ev.points}</td>
+                    <td></td>
                     <td>
                       <button
                         className="sc-bd-del"
@@ -907,17 +951,54 @@ export default function ScoringControl() {
                     </td>
                   </tr>
                 ))}
-                {rd.events.length === 0 && (
-                  <tr><td colSpan="4" style={{textAlign:'center',color:'#666'}}>Sin eventos</td></tr>
+                {(rd.missedVotes || []).map((mv, idx) => (
+                  <tr key={`missed-${mv.id || idx}`} className="sc-bd-row-missed">
+                    <td>{mv.team === 'red' ? <Circle size={9} fill="#ef4444" color="#ef4444" /> : <Circle size={9} fill="#3b82f6" color="#3b82f6" />}</td>
+                    <td>
+                      {ACTION_LABELS[mv.action] || mv.action}
+                      <span className="sc-bd-missed-badge">no confirmado</span>
+                    </td>
+                    <td>—</td>
+                    <td>{mv.judge_name || `Juez ${mv.judge_id}`}</td>
+                    <td></td>
+                  </tr>
+                ))}
+                {rd.events.length === 0 && (rd.missedVotes || []).length === 0 && (
+                  <tr><td colSpan="5" style={{textAlign:'center',color:'#666'}}>Sin eventos</td></tr>
                 )}
               </tbody>
             </table>
           </div>
-        ))}
+          );
+        })}
         {(!breakdown || Object.keys(breakdown.rounds).length === 0) && (
           <p style={{color:'#666',textAlign:'center'}}>Sin puntuaciones aún</p>
         )}
       </div>
+
+      {/* Tiebreaker Modal */}
+      {tieModal.open && (
+        <div className="sb-modal-overlay">
+          <div className="sb-modal sc-tie-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="sb-modal-header">
+              <h2>Round {tieModal.round} — Empate</h2>
+            </div>
+            <div className="sc-tie-modal-body">
+              <p className="sc-tie-modal-sub">Las 3 fases automáticas no resolvieron el empate.<br/>Elige el ganador de este round:</p>
+              <div className="sc-tie-modal-btns">
+                <button
+                  className="sc-tie-btn sc-tie-btn-blue"
+                  onClick={() => handleRoundWinner(tieModal.round, 'blue')}
+                >Azul</button>
+                <button
+                  className="sc-tie-btn sc-tie-btn-red"
+                  onClick={() => handleRoundWinner(tieModal.round, 'red')}
+                >Rojo</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Next Fight Modal */}
       {showNextFightModal && (

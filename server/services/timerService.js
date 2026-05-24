@@ -10,6 +10,35 @@ const kyeShieTimers = new Map();
 
 const KYE_SHIE_DURATION_MS = 60000; // 1 minute per regulations
 
+function resolveTieForRound(fightId, round, config) {
+  // Phase 1: Points without gam-jeom
+  const redPure = db.prepare(`SELECT COALESCE(SUM(points), 0) as t FROM fight_scores WHERE fight_id = ? AND round = ? AND team = 'red' AND action != 'gam_jeom'`).get(fightId, round).t;
+  const bluePure = db.prepare(`SELECT COALESCE(SUM(points), 0) as t FROM fight_scores WHERE fight_id = ? AND round = ? AND team = 'blue' AND action != 'gam_jeom'`).get(fightId, round).t;
+  if (redPure !== bluePure) {
+    return { winner: redPure > bluePure ? 'red' : 'blue', reason: 'tiebreak_phase1' };
+  }
+
+  // Phase 2: kick_head count
+  const redHeads = db.prepare(`SELECT COUNT(*) as c FROM fight_scores WHERE fight_id = ? AND round = ? AND team = 'red' AND action = 'kick_head'`).get(fightId, round).c;
+  const blueHeads = db.prepare(`SELECT COUNT(*) as c FROM fight_scores WHERE fight_id = ? AND round = ? AND team = 'blue' AND action = 'kick_head'`).get(fightId, round).c;
+  if (redHeads !== blueHeads) {
+    return { winner: redHeads > blueHeads ? 'red' : 'blue', reason: 'tiebreak_phase2' };
+  }
+
+  // Phase 3: Missed vote points (judge_inputs with processed=2)
+  const missed = db.prepare(`SELECT team, action FROM judge_inputs WHERE fight_id = ? AND round = ? AND processed = 2`).all(fightId, round);
+  const sumMissed = (team) => missed
+    .filter(i => i.team === team)
+    .reduce((s, i) => s + (ScoringConfig.getPointsForAction(config, i.action) || 0), 0);
+  const redMissed = sumMissed('red');
+  const blueMissed = sumMissed('blue');
+  if (redMissed !== blueMissed) {
+    return { winner: redMissed > blueMissed ? 'red' : 'blue', reason: 'tiebreak_phase3' };
+  }
+
+  return null; // Genuine tie — admin decides
+}
+
 export const timerService = {
   getState(fightId) {
     return timers.get(fightId) || null;
@@ -169,12 +198,25 @@ export const timerService = {
     if (!roundWinner) {
       if (fight.score_red > fight.score_blue) roundWinner = 'red';
       else if (fight.score_blue > fight.score_red) roundWinner = 'blue';
-      // else tied → roundWinner stays null
+      else {
+        // Scores tied — run 3-phase tiebreaker
+        const tieResult = resolveTieForRound(fightId, round, config);
+        if (tieResult) {
+          roundWinner = tieResult.winner;
+          reason = tieResult.reason;
+        } else {
+          reason = 'tie_unresolved'; // Admin decides manually
+        }
+      }
     }
 
     if (roundWinner) {
       const roundWinnerColumn = `round_${round}_winner`;
-      db.prepare(`UPDATE fights SET ${roundWinnerColumn} = ? WHERE id = ?`).run(roundWinner, fightId);
+      const roundReasonColumn = `round_${round}_reason`;
+      db.prepare(`UPDATE fights SET ${roundWinnerColumn} = ?, ${roundReasonColumn} = ? WHERE id = ?`).run(roundWinner, reason, fightId);
+    } else if (reason === 'tie_unresolved') {
+      const roundReasonColumn = `round_${round}_reason`;
+      db.prepare(`UPDATE fights SET ${roundReasonColumn} = ? WHERE id = ?`).run(reason, fightId);
     }
 
     const roundFight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);

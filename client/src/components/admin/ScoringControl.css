@@ -676,6 +676,78 @@
 .sc-bd-del:hover { background: rgba(252,129,129,0.2); }
 .sc-bd-del:disabled { opacity: 0.3; cursor: not-allowed; }
 
+.sc-tiebreak-chip {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(99, 179, 237, 0.1);
+  border: 1px solid #4299e1;
+  color: #90cdf4;
+  font-size: 0.72rem;
+  padding: 0.18rem 0.6rem;
+  border-radius: 12px;
+  margin-bottom: 0.5rem;
+}
+.sc-tiebreak-chip-warn {
+  background: rgba(236, 201, 75, 0.1);
+  border-color: #d69e2e;
+  color: #f6e05e;
+}
+.sc-bd-row-missed td {
+  color: #5a6475;
+  font-style: italic;
+}
+.sc-bd-row-missed td:first-child { opacity: 0.4; }
+.sc-bd-missed-badge {
+  font-size: 0.68rem;
+  color: #666;
+  margin-left: 0.35rem;
+  border: 1px solid #4a5568;
+  border-radius: 3px;
+  padding: 0 3px;
+  font-style: normal;
+}
+
+/* ===== Tie Modal ===== */
+.sc-tie-modal {
+  max-width: 340px;
+  text-align: center;
+}
+.sc-tie-modal-body {
+  padding: 1.5rem 1.5rem 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.4rem;
+}
+.sc-tie-modal-sub {
+  color: #a0aec0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0;
+}
+.sc-tie-modal-btns {
+  display: flex;
+  gap: 1rem;
+}
+.sc-tie-btn {
+  padding: 0.65rem 2rem;
+  font-size: 1rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+.sc-tie-btn:hover { filter: brightness(1.15); }
+.sc-tie-btn-blue {
+  background: #3b82f6;
+  color: #fff;
+}
+.sc-tie-btn-red {
+  background: #ef4444;
+  color: #fff;
+}
+
 /* ===== Next Fight Modal ===== */
 .sb-modal-overlay {
   position: fixed;
