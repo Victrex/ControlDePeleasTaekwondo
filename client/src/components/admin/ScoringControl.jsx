@@ -30,6 +30,13 @@ const GAMEPAD_MAPPING = {
 
 const ANTI_SPAM_MS = 300;
 
+function vibrateGamepad(gp, strongMagnitude = 0.6, weakMagnitude = 0.3, duration = 150) {
+  if (!gp?.vibrationActuator) return;
+  gp.vibrationActuator.playEffect('dual-rumble', {
+    startDelay: 0, duration, weakMagnitude, strongMagnitude,
+  }).catch(() => {});
+}
+
 function formatTime(ms) {
   const sec = Math.max(0, Math.ceil(ms / 1000));
   const m = Math.floor(sec / 60);
@@ -92,6 +99,9 @@ export default function ScoringControl() {
   mainGamepadRef.current = mainGamepad;
   const timerRunningRef = useRef(timer.running);
   timerRunningRef.current = timer.running;
+  const timerRemainingRef = useRef(timer.remainingMs);
+  timerRemainingRef.current = timer.remainingMs;
+  const lastPulsedSecond = useRef(-1);
   // Load initial state
   useEffect(() => {
     if (!fightId) return;
@@ -191,8 +201,10 @@ export default function ScoringControl() {
               lastButtonPress.current[spamKey] = now;
               if (timerRunningRef.current) {
                 api.stopTimer(fightIdRef.current).catch(() => {});
+                vibrateGamepad(gp, 1.0, 1.0, 350);
               } else {
                 api.startTimer(fightIdRef.current).catch(() => {});
+                vibrateGamepad(gp, 1.0, 1.0, 250);
               }
             }
           }
@@ -241,6 +253,20 @@ export default function ScoringControl() {
           }
           prevBtns[gp.index][bi] = pressed;
         }
+      }
+
+      // 10-second countdown: one intense pulse per second on all active gamepads
+      if (timerRunningRef.current && timerRemainingRef.current > 0 && timerRemainingRef.current <= 10000) {
+        const currentSec = Math.ceil(timerRemainingRef.current / 1000);
+        if (currentSec !== lastPulsedSecond.current) {
+          lastPulsedSecond.current = currentSec;
+          const allGps = navigator.getGamepads();
+          for (let i = 0; i < allGps.length; i++) {
+            if (allGps[i]) vibrateGamepad(allGps[i], 1.0, 1.0, 300);
+          }
+        }
+      } else if (!timerRunningRef.current || timerRemainingRef.current > 10000) {
+        lastPulsedSecond.current = -1;
       }
 
       animFrameRef.current = requestAnimationFrame(poll);
