@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Trash2, Plus, Users, GripVertical, Target, RefreshCw, Trophy, ClipboardList, Swords, Check, Medal, Zap, Search, AlertTriangle } from 'lucide-react';
 import api from '../../utils/api';
+import { useSocket } from '../../contexts/SocketContext';
 
 export default function BracketManager({ tournamentId, initialBracketId, onFightsCreated }) {
   const [brackets, setBrackets] = useState([]);
@@ -18,6 +19,7 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
   const [draggingIdx, setDraggingIdx] = useState(null);
   const dragItem = useRef(null);
   const dragOverItem = useRef(null);
+  const { socket } = useSocket();
 
   useEffect(() => {
     if (tournamentId) loadBrackets();
@@ -29,6 +31,27 @@ export default function BracketManager({ tournamentId, initialBracketId, onFight
       loadMatches(selectedBracket.id);
     }
   }, [selectedBracket]);
+
+  // Auto-refresh bracket matches when a fight in this bracket completes or a new one is created
+  useEffect(() => {
+    if (!socket || !selectedBracket) return;
+
+    const handleFightEvent = (fight) => {
+      if (fight && fight.bracket_id === selectedBracket.id) {
+        loadMatches(selectedBracket.id);
+      }
+    };
+
+    socket.on('fight:result-registered', handleFightEvent);
+    socket.on('fight:created', handleFightEvent);
+    socket.on('fight:updated', handleFightEvent);
+
+    return () => {
+      socket.off('fight:result-registered', handleFightEvent);
+      socket.off('fight:created', handleFightEvent);
+      socket.off('fight:updated', handleFightEvent);
+    };
+  }, [socket, selectedBracket]);
 
   const loadBrackets = async () => {
     try {

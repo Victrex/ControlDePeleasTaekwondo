@@ -1,6 +1,7 @@
 import db from '../config/database.js';
 import { ScoringConfig } from '../models/ScoringConfig.js';
 import { getIO } from '../config/socket.js';
+import { FightService } from './fightService.js';
 
 // In-memory timer state: Map<fightId, { interval, remainingMs, round, running }>
 const timers = new Map();
@@ -247,10 +248,17 @@ export const timerService = {
       }
       if (redWins >= needed || blueWins >= needed) {
         const finalWinner = redWins >= needed ? 'red' : 'blue';
-        db.prepare("UPDATE fights SET final_winner = ?, status = 'completed' WHERE id = ?").run(finalWinner, fightId);
+        // Save final_winner but keep status='current' so completeAndAdvance validation passes
+        db.prepare('UPDATE fights SET final_winner = ? WHERE id = ?').run(finalWinner, fightId);
         const finalFight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
         io.emit('fight:result-registered', finalFight);
         io.emit('fight:updated', finalFight);
+        // Complete fight, update bracket, and advance to next fight
+        try {
+          FightService.completeAndAdvance(fightId, state.tournamentId);
+        } catch (err) {
+          console.error('Error en completeAndAdvance desde timerService:', err.message);
+        }
         return; // Fight is over — do not advance to next round
       }
     }
