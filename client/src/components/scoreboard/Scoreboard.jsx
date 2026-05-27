@@ -447,20 +447,6 @@ export default function Scoreboard() {
         </div>
       )}
 
-      {/* Rest countdown overlay */}
-      {!fightResult?.winner && showingRest && !roundResult?.winner && !roundEnded && (
-        <div className="scoreboard-rest-overlay">
-          <div className="rest-content">
-            <h2>DESCANSO</h2>
-            <div
-              className={`rest-timer ${restMs <= 10000 && restMs > 0 ? "rest-timer-critical" : ""}`}
-            >
-              {formatTime(restMs)}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Header */}
       <div className="scoreboard-header">
         <div>
@@ -481,12 +467,12 @@ export default function Scoreboard() {
       {/* Main scoreboard area */}
       <div className="scoreboard-main">
         {/* Red side */}
-        <div className="sb-side sb-red">
+        <div className={`sb-side sb-red ${showingRest ? "sb-side-rest" : ""}`}>
           <div className="sb-competitor-info">
             <div className="sb-name">{fight.competitor_red}</div>
             <div className="sb-academy">{fight.academy_red || ""}</div>
           </div>
-          <div className="sb-score-area">
+          <div className={`sb-score-area ${showingRest ? "sb-score-area-rest" : ""}`}>
             <div
               className={`sb-score ${lastAction?.team === "red" ? "sb-score-flash" : ""}`}
             >
@@ -494,22 +480,20 @@ export default function Scoreboard() {
             </div>
           </div>
           <div className="sb-bottom-info">
-            <div className="sb-gamjeom">
-              {Array.from({ length: gamJeomRed }, (_, i) => (
-                <span key={i} className="gj-mark">
-                  ●
-                </span>
-              ))}
-              {gamJeomRed > 0 && <span className="gj-count">{gamJeomRed}</span>}
+            <div className="sb-gamjeom-panel" aria-label="Gamjeoms competidor rojo">
+              <span className="sb-gamjeom-count">{gamJeomRed}</span>
+              <span className="sb-gamjeom-label">GAMJEOMS</span>
             </div>
-            <div className="sb-rounds-won">
-              {Array.from({ length: numRounds }, (_, i) => i + 1).map((r) => (
+          </div>
+          <div className={`sb-rounds-won sb-rounds-side sb-rounds-left ${showingRest ? "sb-rounds-rest sb-rounds-rest-red" : ""}`} aria-label="Rounds rojo">
+            {Array.from({ length: numRounds }, (_, i) => i + 1).map((r) => (
+              <div key={r} className="sb-round-item">
+                <span className="sb-round-label">R{r}</span>
                 <span
-                  key={r}
                   className={`sb-round-dot ${roundWinners[r] === "red" ? "sb-dot-won" : ""}`}
                 />
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
           {/* Judge vote indicator - red side */}
           {judgeVote && judgeVote.team === "red" && (
@@ -526,9 +510,9 @@ export default function Scoreboard() {
                   <span className="sb-vote-count">{judgeVote.judgeCount}</span>
                 )}
               </div>
-              {judgeVote.judgeName && (
+{/*               {judgeVote.judgeName && (
                 <span className="sb-vote-judge-name">{judgeVote.judgeName}</span>
-              )}
+              )} */}
             </div>
           )}
         </div>
@@ -542,9 +526,15 @@ export default function Scoreboard() {
               {matchLabel && <span className="sb-match">{matchLabel}</span>}
             </div>
             <div
-              className={`sb-timer ${timer.running ? "timer-running" : "timer-stopped"} ${timerCritical ? "timer-critical" : timerLow ? "timer-low" : ""}`}
+              className={`sb-timer ${showingRest ? "sb-timer-rest" : ""} ${timer.running ? "timer-running" : "timer-stopped"} ${timerCritical ? "timer-critical" : timerLow ? "timer-low" : ""}`}
             >
-              {formatTime(timer.remainingMs)}
+              {showingRest && (
+                <div className="sb-timeout-label">DESCANSO</div>
+              )}
+              {!showingRest && !timer.running && timer.remainingMs > 0 && (
+                <div className="sb-timeout-label">TIME OUT</div>
+              )}
+              {showingRest ? formatTime(restMs) : formatTime(timer.remainingMs)}
             </div>
             {/* Last action flash */}
             {lastAction && (
@@ -565,12 +555,12 @@ export default function Scoreboard() {
         </div>
 
         {/* Blue side */}
-        <div className="sb-side sb-blue">
+        <div className={`sb-side sb-blue ${showingRest ? "sb-side-rest" : ""}`}>
           <div className="sb-competitor-info">
             <div className="sb-name">{fight.competitor_blue}</div>
             <div className="sb-academy">{fight.academy_blue || ""}</div>
           </div>
-          <div className="sb-score-area">
+          <div className={`sb-score-area ${showingRest ? "sb-score-area-rest" : ""}`}>
             <div
               className={`sb-score ${lastAction?.team === "blue" ? "sb-score-flash" : ""}`}
             >
@@ -578,24 +568,20 @@ export default function Scoreboard() {
             </div>
           </div>
           <div className="sb-bottom-info">
-            <div className="sb-gamjeom">
-              {Array.from({ length: gamJeomBlue }, (_, i) => (
-                <span key={i} className="gj-mark">
-                  ●
-                </span>
-              ))}
-              {gamJeomBlue > 0 && (
-                <span className="gj-count">{gamJeomBlue}</span>
-              )}
+            <div className="sb-gamjeom-panel" aria-label="Gamjeoms competidor azul">
+              <span className="sb-gamjeom-count">{gamJeomBlue}</span>
+              <span className="sb-gamjeom-label">GAMJEOMS</span>
             </div>
-            <div className="sb-rounds-won">
-              {Array.from({ length: numRounds }, (_, i) => i + 1).map((r) => (
+          </div>
+          <div className={`sb-rounds-won sb-rounds-side sb-rounds-right ${showingRest ? "sb-rounds-rest sb-rounds-rest-blue" : ""}`} aria-label="Rounds azul">
+            {Array.from({ length: numRounds }, (_, i) => i + 1).map((r) => (
+              <div key={r} className="sb-round-item">
+                <span className="sb-round-label">R{r}</span>
                 <span
-                  key={r}
                   className={`sb-round-dot ${roundWinners[r] === "blue" ? "sb-dot-won" : ""}`}
                 />
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
           {/* Judge vote indicator - blue side */}
           {judgeVote && judgeVote.team === "blue" && (
@@ -612,9 +598,9 @@ export default function Scoreboard() {
                   <span className="sb-vote-count">{judgeVote.judgeCount}</span>
                 )}
               </div>
-              {judgeVote.judgeName && (
+{/*               {judgeVote.judgeName && (
                 <span className="sb-vote-judge-name">{judgeVote.judgeName}</span>
-              )}
+              )} */}
             </div>
           )}
         </div>
