@@ -312,6 +312,12 @@ export function initializeDatabase() {
     db.exec(`ALTER TABLE judge_inputs ADD COLUMN judge_name TEXT`);
   } catch (e) {}
   try {
+    db.exec(`ALTER TABLE scoring_config ADD COLUMN gam_jeom_double_last_seconds_enabled INTEGER NOT NULL DEFAULT 0`);
+  } catch (e) {}
+  try {
+    db.exec(`ALTER TABLE scoring_config ADD COLUMN gam_jeom_double_last_seconds INTEGER NOT NULL DEFAULT 10`);
+  } catch (e) {}
+  try {
     db.exec(`ALTER TABLE fights ADD COLUMN round_1_reason TEXT`);
   } catch (e) {}
   try {

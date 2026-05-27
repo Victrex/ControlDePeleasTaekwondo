@@ -14,7 +14,9 @@ const DEFAULTS = {
   points_kick_head: 3,
   points_spinning_kick_body: 4,
   points_spinning_kick_head: 5,
-  gam_jeom_points: 1
+  gam_jeom_points: 1,
+  gam_jeom_double_last_seconds_enabled: 0,
+  gam_jeom_double_last_seconds: 10
 };
 
 export class ScoringConfig {

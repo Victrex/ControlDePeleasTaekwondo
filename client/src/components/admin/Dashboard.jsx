@@ -1235,6 +1235,42 @@ export default function Dashboard() {
                     onChange={e => setScoringConfig({...scoringConfig, gam_jeom_points: parseInt(e.target.value) || 0})} />
                 </div>
               </div>
+              <div style={{borderTop:'1px solid #e5e7eb', paddingTop:'0.9rem', marginTop:'0.5rem'}}>
+                <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:'1rem', marginBottom:'0.7rem'}}>
+                  <span style={{fontWeight:600, color:'#2d3748', fontSize:'0.93rem', lineHeight:1.4}}>
+                    Doble punto por Gam-jeom en últimos segundos
+                  </span>
+                  {/* Toggle switch */}
+                  <label style={{position:'relative', display:'inline-block', width:'46px', height:'26px', flexShrink:0, cursor:'pointer'}}>
+                    <input type="checkbox" checked={!!scoringConfig.gam_jeom_double_last_seconds_enabled}
+                      onChange={e => setScoringConfig({...scoringConfig, gam_jeom_double_last_seconds_enabled: e.target.checked ? 1 : 0})}
+                      style={{opacity:0, width:0, height:0, position:'absolute'}} />
+                    <span style={{
+                      position:'absolute', top:0, left:0, right:0, bottom:0,
+                      backgroundColor: scoringConfig.gam_jeom_double_last_seconds_enabled ? '#667eea' : '#cbd5e0',
+                      borderRadius:'26px',
+                      transition:'background-color 0.2s ease'
+                    }} />
+                    <span style={{
+                      position:'absolute',
+                      top:'3px',
+                      left: scoringConfig.gam_jeom_double_last_seconds_enabled ? '23px' : '3px',
+                      width:'20px', height:'20px',
+                      backgroundColor:'white',
+                      borderRadius:'50%',
+                      transition:'left 0.2s ease',
+                      boxShadow:'0 1px 4px rgba(0,0,0,0.25)'
+                    }} />
+                  </label>
+                </div>
+                {!!scoringConfig.gam_jeom_double_last_seconds_enabled && (
+                  <div className="form-group">
+                    <label>Umbral (segundos finales)</label>
+                    <input type="number" min="1" max="60" value={scoringConfig.gam_jeom_double_last_seconds ?? 10}
+                      onChange={e => setScoringConfig({...scoringConfig, gam_jeom_double_last_seconds: parseInt(e.target.value) || 10})} />
+                  </div>
+                )}
+              </div>
               <div className="modal-buttons" style={{marginTop:'1rem'}}>
                 <button type="button" onClick={() => setShowScoringConfig(false)} className="btn-secondary">Cancelar</button>
                 <button type="submit" className="btn-primary">Guardar</button>

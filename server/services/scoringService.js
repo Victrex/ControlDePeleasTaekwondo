@@ -112,10 +112,22 @@ export const scoringService = {
     const gamCol = team === 'red' ? 'gam_jeom_red' : 'gam_jeom_blue';
     db.prepare(`UPDATE fights SET ${gamCol} = ${gamCol} + 1 WHERE id = ?`).run(fightId);
 
-    // Award point to the OPPONENT
+    // Determine points to award (double during last N seconds if enabled)
+    let pointsToAward = config.gam_jeom_points;
+    let doublePoints = false;
+    if (config.gam_jeom_double_last_seconds_enabled) {
+      const timerState = timerService.getState(fightId);
+      const thresholdMs = (config.gam_jeom_double_last_seconds || 10) * 1000;
+      if (timerState && timerState.remainingMs <= thresholdMs) {
+        pointsToAward = config.gam_jeom_points * 2;
+        doublePoints = true;
+      }
+    }
+
+    // Award point(s) to the OPPONENT
     const opponentTeam = team === 'red' ? 'blue' : 'red';
     const scoreCol = opponentTeam === 'red' ? 'score_red' : 'score_blue';
-    db.prepare(`UPDATE fights SET ${scoreCol} = ${scoreCol} + ? WHERE id = ?`).run(config.gam_jeom_points, fightId);
+    db.prepare(`UPDATE fights SET ${scoreCol} = ${scoreCol} + ? WHERE id = ?`).run(pointsToAward, fightId);
 
     // Record as a score event (opponent gets the point, action = gam_jeom)
     Score.create({
@@ -123,7 +135,7 @@ export const scoringService = {
       round,
       team: opponentTeam,
       action: 'gam_jeom',
-      points: config.gam_jeom_points,
+      points: pointsToAward,
       timestamp: Date.now()
     });
 
@@ -146,7 +158,9 @@ export const scoringService = {
       scoreRed: updatedFight.score_red,
       scoreBlue: updatedFight.score_blue,
       round,
-      roundGamJeom // number of gam-jeoms the offending team has THIS round
+      roundGamJeom, // number of gam-jeoms the offending team has THIS round
+      pointsAwarded: pointsToAward,
+      doublePoints
     });
     io.emit('fight:updated', updatedFight);
 
@@ -194,17 +208,16 @@ export const scoringService = {
     const gamCol = team === 'red' ? 'gam_jeom_red' : 'gam_jeom_blue';
     db.prepare(`UPDATE fights SET ${gamCol} = ${gamCol} - 1 WHERE id = ?`).run(fightId);
 
-    // Remove point from opponent
+    // Remove last gam_jeom score event and use its actual stored points (may be doubled)
     const opponentTeam = team === 'red' ? 'blue' : 'red';
     const scoreCol = opponentTeam === 'red' ? 'score_red' : 'score_blue';
-    db.prepare(`UPDATE fights SET ${scoreCol} = MAX(0, ${scoreCol} - ?) WHERE id = ?`).run(config.gam_jeom_points, fightId);
-
-    // Remove last gam_jeom score event for this fight
     const lastGamJeomScore = db.prepare(`
-      SELECT id FROM fight_scores 
+      SELECT id, points FROM fight_scores 
       WHERE fight_id = ? AND team = ? AND action = 'gam_jeom'
       ORDER BY id DESC LIMIT 1
     `).get(fightId, opponentTeam);
+    const pointsToRemove = lastGamJeomScore ? lastGamJeomScore.points : config.gam_jeom_points;
+    db.prepare(`UPDATE fights SET ${scoreCol} = MAX(0, ${scoreCol} - ?) WHERE id = ?`).run(pointsToRemove, fightId);
     if (lastGamJeomScore) {
       db.prepare('DELETE FROM fight_scores WHERE id = ?').run(lastGamJeomScore.id);
     }
