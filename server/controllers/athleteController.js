@@ -49,6 +49,15 @@ export const athleteController = {
     }
   },
 
+  deleteAll(req, res) {
+    try {
+      const result = Athlete.deleteAll();
+      res.json({ success: true, deleted: result.changes });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
   // POST /api/athletes/import  – body: { athletes: [...] }
   importBatch(req, res) {
     try {

@@ -92,6 +92,10 @@ export class Athlete {
     return db.prepare('DELETE FROM athletes WHERE id = ?').run(id);
   }
 
+  static deleteAll() {
+    return db.prepare('DELETE FROM athletes').run();
+  }
+
   static importBatch(rows) {
     const insert = db.prepare(`
       INSERT INTO athletes (name, dob, weight, gender, belt, academy, license_number)

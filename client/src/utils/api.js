@@ -442,6 +442,10 @@ class API {
     return this.request(`/athletes/${id}`, { method: 'DELETE' });
   }
 
+  async deleteAllAthletes() {
+    return this.request('/athletes', { method: 'DELETE' });
+  }
+
   async importAthletes(athletes) {
     return this.request('/athletes/import', { method: 'POST', body: JSON.stringify({ athletes }) });
   }

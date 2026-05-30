@@ -93,6 +93,7 @@ router.delete('/brackets/:bracket_id', requireAdmin, bracketController.deleteBra
 // ============================================
 router.get('/athletes', requireAuth, athleteController.getAll);
 router.post('/athletes/import', requireAdmin, athleteController.importBatch);
+router.delete('/athletes', requireAdmin, athleteController.deleteAll);
 router.post('/athletes/suggest-category', requireAuth, athleteController.suggestCategoryFromData);
 router.get('/athletes/:id/suggest-category', requireAuth, athleteController.suggestCategory);
 router.get('/athletes/:id/brackets', requireAuth, athleteController.getBracketAssignments);

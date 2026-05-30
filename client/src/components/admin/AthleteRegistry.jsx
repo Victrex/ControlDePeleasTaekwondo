@@ -35,6 +35,7 @@ export default function AthleteRegistry() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [deleteAllConfirm, setDeleteAllConfirm] = useState(false);
 
   const loadAthletes = useCallback(async () => {
     setLoading(true);
@@ -104,6 +105,16 @@ export default function AthleteRegistry() {
     }
   };
 
+  const handleDeleteAll = async () => {
+    try {
+      await api.deleteAllAthletes();
+      setDeleteAllConfirm(false);
+      loadAthletes();
+    } catch (e) {
+      setError('Error eliminando atletas');
+    }
+  };
+
   const clearFilters = () => {
     setSearch('');
     setFilterBelt('');
@@ -129,6 +140,13 @@ export default function AthleteRegistry() {
         <div className="ar-header-actions">
           <button className="ar-btn-secondary" onClick={() => navigate('/admin/bulk-import')}>
             Importar CSV/Excel
+          </button>
+          <button
+            className="ar-btn-danger"
+            onClick={() => setDeleteAllConfirm(true)}
+            disabled={athletes.length === 0}
+          >
+            Borrar todos
           </button>
           <button className="ar-btn-primary" onClick={openNew}>
             <UserPlus size={16} /> Agregar atleta
@@ -282,6 +300,22 @@ export default function AthleteRegistry() {
             <div className="ar-modal-footer">
               <button className="ar-btn-ghost" onClick={() => setDeleteConfirm(null)}>Cancelar</button>
               <button className="ar-btn-danger" onClick={() => handleDelete(deleteConfirm.id)}>Eliminar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteAllConfirm && (
+        <div className="ar-modal-overlay" onClick={() => setDeleteAllConfirm(false)}>
+          <div className="ar-modal ar-modal-sm" onClick={e => e.stopPropagation()}>
+            <h2>¿Borrar todos los atletas?</h2>
+            <p>
+              Se eliminarán <strong>{athletes.length}</strong> atletas de forma permanente.
+              Esta acción no se puede deshacer.
+            </p>
+            <div className="ar-modal-footer">
+              <button className="ar-btn-ghost" onClick={() => setDeleteAllConfirm(false)}>Cancelar</button>
+              <button className="ar-btn-danger" onClick={handleDeleteAll}>Borrar todos</button>
             </div>
           </div>
         </div>
