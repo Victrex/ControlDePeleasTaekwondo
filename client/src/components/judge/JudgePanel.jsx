@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { useSocket } from '../../contexts/SocketContext';
+import { useSocket, useSocketRoom } from '../../contexts/SocketContext';
+import { useServerTimer, normalizeTimer } from '../../hooks/useServerTimer';
 import api from '../../utils/api';
 import './JudgePanel.css';
 
@@ -32,11 +33,12 @@ export default function JudgePanel() {
   const { fightId } = useParams();
   const [searchParams] = useSearchParams();
   const judgeId = parseInt(searchParams.get('judgeId') || '1');
-  const { socket, connected } = useSocket();
+  const { socket, connected, reconnectCount } = useSocket();
 
   const [fight, setFight] = useState(null);
   const [config, setConfig] = useState(null);
-  const [timer, setTimer] = useState({ remainingMs: 0, round: 1, running: false });
+  const [timer, setTimer] = useState({ remainingMs: 0, round: 1, running: false, startedAt: null, durationMs: null, clockOffset: 0 });
+  const remainingMs = useServerTimer(timer);
   const [scoreRed, setScoreRed] = useState(0);
   const [scoreBlue, setScoreBlue] = useState(0);
   const [gamepadConnected, setGamepadConnected] = useState(false);
@@ -57,26 +59,41 @@ export default function JudgePanel() {
   const fightIdRef = useRef(fightId);
   fightIdRef.current = fightId;
 
-  // Load initial state
-  useEffect(() => {
+  // Room de la pelea (se re-une automáticamente al reconectar)
+  useSocketRoom(socket, 'join:fight', 'leave:fight', fightId ? parseInt(fightId) : null);
+
+  const loadState = useCallback(() => {
     if (!fightId) return;
     api.getScoringState(fightId).then(data => {
       setFight(data.fight);
       setConfig(data.config);
       setScoreRed(data.fight.score_red || 0);
       setScoreBlue(data.fight.score_blue || 0);
-      setTimer(data.timer);
+      setTimer(normalizeTimer({ ...data.timer, serverNow: data.timer.serverNow ?? data.serverNow }));
     }).catch(err => console.error('Error loading:', err));
   }, [fightId]);
+
+  // Load initial state
+  useEffect(() => {
+    loadState();
+  }, [loadState]);
+
+  // Tras reconectar, re-sincronizar
+  useEffect(() => {
+    if (reconnectCount > 0) loadState();
+  }, [reconnectCount, loadState]);
 
   // Socket handlers
   useEffect(() => {
     if (!socket) return;
-    socket.emit('join-judge', { judgeId, fightId });
 
-    const onTick = (d) => {
+    const onTimer = (d) => {
       if (String(d.fightId) !== String(fightIdRef.current)) return;
-      setTimer({ remainingMs: d.remainingMs, round: d.round, running: d.running });
+      setTimer(prev => normalizeTimer(d, prev));
+    };
+    const onRoundEnded = (d) => {
+      if (String(d.fightId) !== String(fightIdRef.current)) return;
+      setTimer(prev => ({ ...prev, running: false, remainingMs: 0, startedAt: null, durationMs: null }));
     };
     const onScore = (d) => {
       if (String(d.fightId) !== String(fightIdRef.current)) return;
@@ -89,28 +106,24 @@ export default function JudgePanel() {
       setScoreBlue(d.scoreBlue);
     };
 
-    socket.on('timer:tick', onTick);
-    socket.on('timer:started', (d) => {
-      if (String(d.fightId) !== String(fightIdRef.current)) return;
-      setTimer(prev => ({ ...prev, running: true }));
-    });
-    socket.on('timer:stopped', (d) => {
-      if (String(d.fightId) !== String(fightIdRef.current)) return;
-      setTimer(prev => ({ ...prev, running: false, remainingMs: d.remainingMs }));
-    });
+    socket.on('timer:sync', onTimer);
+    socket.on('timer:started', onTimer);
+    socket.on('timer:stopped', onTimer);
+    socket.on('round:ended', onRoundEnded);
     socket.on('score:awarded', onScore);
     socket.on('score:edited', onScore);
     socket.on('gam_jeom:added', onGamJeom);
 
     return () => {
-      socket.off('timer:tick', onTick);
-      socket.off('timer:started');
-      socket.off('timer:stopped');
+      socket.off('timer:sync', onTimer);
+      socket.off('timer:started', onTimer);
+      socket.off('timer:stopped', onTimer);
+      socket.off('round:ended', onRoundEnded);
       socket.off('score:awarded', onScore);
       socket.off('score:edited', onScore);
       socket.off('gam_jeom:added', onGamJeom);
     };
-  }, [socket, fightId, judgeId]);
+  }, [socket]);
 
   // Send input via WebSocket
   const sendInput = useCallback((team, action) => {
@@ -215,7 +228,7 @@ export default function JudgePanel() {
         <div className="jp-judge-id">Juez {judgeId}</div>
         <div className="jp-timer">
           <span className={timer.running ? 'jp-timer-live' : 'jp-timer-paused'}>
-            {formatTime(timer.remainingMs)}
+            {formatTime(remainingMs)}
           </span>
           <span className="jp-round">R{timer.round}</span>
         </div>

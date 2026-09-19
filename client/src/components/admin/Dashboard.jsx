@@ -1,14 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { useSocket } from '../../contexts/SocketContext';
+import { useSocket, useSocketRoom } from '../../contexts/SocketContext';
 import api from '../../utils/api';
 import BracketManager from './BracketManager';
 import { Trash2, Swords, BarChart2, Trophy, Circle, User, Settings, Link2, Monitor, Play, Check, RefreshCw } from 'lucide-react';
 
 export default function Dashboard() {
   const { user, logout } = useAuth();
-  const { socket, connected } = useSocket();
+  const { socket, connected, reconnectCount } = useSocket();
   const navigate = useNavigate();
   
   const [tournaments, setTournaments] = useState([]);
@@ -62,31 +62,64 @@ export default function Dashboard() {
     }
   }, [selectedTournament]);
 
+  const selectedTournamentIdRef = useRef(null);
+  selectedTournamentIdRef.current = selectedTournament?.id ?? null;
+  const reloadTimerRef = useRef(null);
+
+  // Rooms: operador + torneo seleccionado (se re-unen al reconectar)
+  useSocketRoom(socket, 'join:admin', null, 'admin');
+  useSocketRoom(socket, 'join:tournament', 'leave:tournament', selectedTournament?.id);
+
+  // Varios eventos llegan en ráfaga (completar + siguiente + creada): una sola recarga
+  const scheduleReload = () => {
+    if (reloadTimerRef.current) return;
+    reloadTimerRef.current = setTimeout(() => {
+      reloadTimerRef.current = null;
+      if (selectedTournamentIdRef.current) loadFights(selectedTournamentIdRef.current);
+    }, 150);
+  };
+
   useEffect(() => {
-    if (socket) {
-      socket.on('fight:updated', handleFightUpdate);
-      socket.on('fight:created', handleFightCreated);
-      socket.on('tournament:updated', loadTournaments);
-      
-      return () => {
-        socket.off('fight:updated');
-        socket.off('fight:created');
-        socket.off('tournament:updated');
-      };
-    }
-  }, [socket, selectedTournament]);
+    if (!socket) return undefined;
 
-  const handleFightUpdate = (data) => {
-    if (selectedTournament && data.tournament_id === selectedTournament.id) {
-      loadFights(selectedTournament.id);
-    }
-  };
+    const isMine = (data) => {
+      const tid = data?.tournament_id ?? data?.tournamentId;
+      return tid != null && tid === selectedTournamentIdRef.current;
+    };
+    const onFightEvent = (data) => { if (isMine(data)) scheduleReload(); };
+    const onOrderChanged = (list) => { if (Array.isArray(list) && isMine(list[0])) scheduleReload(); };
+    const onFightDeleted = () => scheduleReload();
 
-  const handleFightCreated = (data) => {
-    if (selectedTournament && data.tournamentId === selectedTournament.id) {
-      loadFights(selectedTournament.id);
+    socket.on('fight:updated', onFightEvent);
+    socket.on('fight:created', onFightEvent);
+    socket.on('fight:current-changed', onFightEvent);
+    socket.on('fight:result-registered', onFightEvent);
+    socket.on('fights:order-changed', onOrderChanged);
+    socket.on('fight:deleted', onFightDeleted);
+    socket.on('tournament:updated', loadTournaments);
+
+    return () => {
+      socket.off('fight:updated', onFightEvent);
+      socket.off('fight:created', onFightEvent);
+      socket.off('fight:current-changed', onFightEvent);
+      socket.off('fight:result-registered', onFightEvent);
+      socket.off('fights:order-changed', onOrderChanged);
+      socket.off('fight:deleted', onFightDeleted);
+      socket.off('tournament:updated', loadTournaments);
+      if (reloadTimerRef.current) {
+        clearTimeout(reloadTimerRef.current);
+        reloadTimerRef.current = null;
+      }
+    };
+  }, [socket]);
+
+  // Tras reconectar, re-sincronizar
+  useEffect(() => {
+    if (reconnectCount > 0) {
+      loadTournaments();
+      if (selectedTournamentIdRef.current) loadFights(selectedTournamentIdRef.current);
     }
-  };
+  }, [reconnectCount]);
 
   const selectTournament = (tournament) => {
     setSelectedTournament(tournament);

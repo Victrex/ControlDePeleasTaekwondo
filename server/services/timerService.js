@@ -1,83 +1,148 @@
 import db from '../config/database.js';
 import { ScoringConfig } from '../models/ScoringConfig.js';
-import { getIO } from '../config/socket.js';
+import { emitTo, emitEvents } from '../config/socket.js';
 
-// In-memory timer state: Map<fightId, { interval, remainingMs, round, running }>
+/**
+ * Modelo basado en timestamp:
+ *  - El servidor guarda startedAt + durationMs y programa UN setTimeout para el fin del round.
+ *  - No hay ticks: los clientes calculan remaining = durationMs - (now - startedAt).
+ *  - SQLite sólo se escribe en cambios de estado (start/stop/reset/round/fin).
+ *
+ * In-memory timer state: Map<fightId, TimerState>
+ * TimerState = { fightId, tournamentId, round, running, remainingMs, startedAt, durationMs, endTimeout }
+ */
 const timers = new Map();
 
-// Kye Shie state: Map<fightId, { interval, remainingMs, active }>
+// Kye Shie state: Map<fightId, { startedAt, durationMs, endTimeout }>
 const kyeShieTimers = new Map();
 
 const KYE_SHIE_DURATION_MS = 60000; // 1 minute per regulations
 
+// Statements preparados (se reutilizan; evita recompilar SQL en cada operación)
+const stmts = {
+  getFight: db.prepare('SELECT * FROM fights WHERE id = ?'),
+  setRunning: db.prepare('UPDATE fights SET timer_running = 1, timer_remaining_ms = ? WHERE id = ?'),
+  setStopped: db.prepare('UPDATE fights SET timer_running = 0, timer_remaining_ms = ? WHERE id = ?'),
+  setRoundAndTime: db.prepare('UPDATE fights SET current_round = ?, timer_remaining_ms = ?, timer_running = 0 WHERE id = ?'),
+  resetRoundScores: db.prepare('UPDATE fights SET score_red = 0, score_blue = 0, gam_jeom_red = 0, gam_jeom_blue = 0 WHERE id = ?'),
+  setFinalWinner: db.prepare("UPDATE fights SET final_winner = ?, status = 'completed' WHERE id = ?"),
+  deleteRoundScores: db.prepare('DELETE FROM fight_scores WHERE fight_id = ? AND round = ?'),
+  deleteRoundInputs: db.prepare('DELETE FROM judge_inputs WHERE fight_id = ? AND round = ?'),
+  setRoundFull: db.prepare('UPDATE fights SET current_round = ?, timer_remaining_ms = ?, timer_running = 0, score_red = 0, score_blue = 0, gam_jeom_red = 0, gam_jeom_blue = 0 WHERE id = ?')
+};
+
+function computeRemaining(state) {
+  if (!state) return 0;
+  if (!state.running) return Math.max(0, state.remainingMs);
+  return Math.max(0, state.durationMs - (Date.now() - state.startedAt));
+}
+
+function clearEndTimeout(state) {
+  if (state?.endTimeout) {
+    clearTimeout(state.endTimeout);
+    state.endTimeout = null;
+  }
+}
+
+function createState(fight, remainingMs, round) {
+  return {
+    fightId: fight.id,
+    tournamentId: fight.tournament_id,
+    round: round ?? (fight.current_round || 1),
+    running: false,
+    remainingMs,
+    startedAt: null,
+    durationMs: remainingMs,
+    endTimeout: null
+  };
+}
+
+// Payload común para todos los eventos de timer (clientes calculan localmente)
+function timerPayload(state) {
+  return {
+    fightId: state.fightId,
+    round: state.round,
+    running: state.running,
+    remainingMs: computeRemaining(state),
+    startedAt: state.running ? state.startedAt : null,
+    durationMs: state.running ? state.durationMs : null,
+    serverNow: Date.now()
+  };
+}
+
+function emitTimer(event, state) {
+  emitTo.fight(state.fightId, event, timerPayload(state));
+}
+
 export const timerService = {
   getState(fightId) {
-    return timers.get(fightId) || null;
+    const state = timers.get(fightId);
+    if (!state) return null;
+    return {
+      fightId: state.fightId,
+      round: state.round,
+      running: state.running,
+      remainingMs: computeRemaining(state),
+      startedAt: state.running ? state.startedAt : null,
+      durationMs: state.running ? state.durationMs : null
+    };
+  },
+
+  // Payload serializable para GET /scoring/:id/state
+  getPublicState(fightId, fight, config) {
+    const state = this.getState(fightId);
+    if (state) {
+      return { ...state, serverNow: Date.now() };
+    }
+    return {
+      fightId,
+      remainingMs: fight.timer_remaining_ms || config.round_time_seconds * 1000,
+      round: fight.current_round || 1,
+      running: false,
+      startedAt: null,
+      durationMs: null,
+      serverNow: Date.now()
+    };
   },
 
   start(fightId) {
-    const fight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
+    const fight = stmts.getFight.get(fightId);
     if (!fight) throw new Error('Pelea no encontrada');
 
     const config = ScoringConfig.getByTournament(fight.tournament_id);
     let state = timers.get(fightId);
 
     if (!state) {
-      // First start — initialize from fight data or config defaults
       const remainingMs = fight.timer_remaining_ms || config.round_time_seconds * 1000;
-      state = {
-        interval: null,
-        remainingMs,
-        round: fight.current_round || 1,
-        running: false,
-        fightId,
-        tournamentId: fight.tournament_id
-      };
+      state = createState(fight, remainingMs, fight.current_round || 1);
       timers.set(fightId, state);
     }
 
     if (state.running) return state;
+    if (state.remainingMs <= 0) {
+      // Round agotado: no hay nada que correr, sólo re-sincronizar clientes
+      emitTimer('timer:sync', state);
+      return state;
+    }
 
     state.running = true;
-    state.lastTick = Date.now();
+    state.startedAt = Date.now();
+    state.durationMs = state.remainingMs;
 
-    // Persist timer_running state
-    db.prepare('UPDATE fights SET timer_running = 1 WHERE id = ?').run(fightId);
+    // Única escritura al iniciar: estado + tiempo restante al momento de arrancar
+    stmts.setRunning.run(state.remainingMs, fightId);
 
-    const io = getIO();
-
-    const tick = () => {
-      const now = Date.now();
-      const elapsed = now - state.lastTick;
-      state.lastTick = now;
-      state.remainingMs = Math.max(0, state.remainingMs - elapsed);
-
-      // Persist remaining time every tick
-      db.prepare('UPDATE fights SET timer_remaining_ms = ? WHERE id = ?').run(state.remainingMs, fightId);
-
-      io.emit('timer:tick', {
-        fightId,
-        remainingMs: state.remainingMs,
-        round: state.round,
-        running: true
-      });
-
-      // Switch to fast interval when under 10 seconds
-      if (state.remainingMs <= 10000 && state.tickRate !== 50) {
-        state.tickRate = 50;
-        clearInterval(state.interval);
-        state.interval = setInterval(tick, 50);
-      }
-
-      if (state.remainingMs <= 0) {
+    clearEndTimeout(state);
+    state.endTimeout = setTimeout(() => {
+      state.endTimeout = null;
+      try {
         this.endRound(fightId);
+      } catch (error) {
+        console.error('Error finalizando round automáticamente:', error.message);
       }
-    };
+    }, state.durationMs);
 
-    state.tickRate = state.remainingMs <= 10000 ? 50 : 1000;
-    state.interval = setInterval(tick, state.tickRate);
-
-    io.emit('timer:started', { fightId, remainingMs: state.remainingMs, round: state.round });
+    emitTimer('timer:started', state);
     return state;
   },
 
@@ -85,85 +150,62 @@ export const timerService = {
     const state = timers.get(fightId);
     if (!state) return null;
 
-    if (state.interval) {
-      clearInterval(state.interval);
-      state.interval = null;
+    if (state.running) {
+      state.remainingMs = computeRemaining(state);
+      state.running = false;
+      state.startedAt = null;
+      clearEndTimeout(state);
+      stmts.setStopped.run(state.remainingMs, fightId);
     }
-    state.running = false;
 
-    db.prepare('UPDATE fights SET timer_running = 0, timer_remaining_ms = ? WHERE id = ?').run(state.remainingMs, fightId);
-
-    const io = getIO();
-    io.emit('timer:stopped', { fightId, remainingMs: state.remainingMs, round: state.round });
+    emitTimer('timer:stopped', state);
     return state;
   },
 
   reset(fightId, seconds) {
-    let state = timers.get(fightId);
-    if (state && state.interval) {
-      clearInterval(state.interval);
-      state.interval = null;
-    }
-
-    const fight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
+    const fight = stmts.getFight.get(fightId);
     if (!fight) throw new Error('Pelea no encontrada');
 
     const config = ScoringConfig.getByTournament(fight.tournament_id);
     const ms = (seconds || config.round_time_seconds) * 1000;
 
+    let state = timers.get(fightId);
     if (!state) {
-      state = {
-        interval: null,
-        remainingMs: ms,
-        round: fight.current_round || 1,
-        running: false,
-        fightId,
-        tournamentId: fight.tournament_id
-      };
+      state = createState(fight, ms);
       timers.set(fightId, state);
     } else {
+      clearEndTimeout(state);
       state.remainingMs = ms;
+      state.durationMs = ms;
       state.running = false;
+      state.startedAt = null;
     }
 
-    db.prepare('UPDATE fights SET timer_running = 0, timer_remaining_ms = ? WHERE id = ?').run(ms, fightId);
+    stmts.setStopped.run(ms, fightId);
 
-    const io = getIO();
-    io.emit('timer:tick', { fightId, remainingMs: ms, round: state.round, running: false });
+    emitTimer('timer:sync', state);
     return state;
   },
 
   endRound(fightId, options = {}) {
     let state = timers.get(fightId);
 
-    const fight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
+    const fight = stmts.getFight.get(fightId);
     if (!fight) return;
 
     if (!state) {
-      state = {
-        interval: null,
-        remainingMs: fight.timer_remaining_ms || 0,
-        round: fight.current_round || 1,
-        running: false,
-        fightId,
-        tournamentId: fight.tournament_id
-      };
+      state = createState(fight, fight.timer_remaining_ms || 0);
       timers.set(fightId, state);
     }
 
-    // Stop the interval
-    if (state.interval) {
-      clearInterval(state.interval);
-      state.interval = null;
-    }
+    clearEndTimeout(state);
     state.running = false;
+    state.startedAt = null;
     state.remainingMs = 0;
 
     const config = ScoringConfig.getByTournament(fight.tournament_id);
     const round = state.round;
     let { roundWinner = null, reason = null } = options;
-
-    db.prepare('UPDATE fights SET timer_running = 0, timer_remaining_ms = 0 WHERE id = ?').run(fightId);
 
     // Auto-determine round winner by score when not explicitly provided (e.g. timer ran out)
     if (!roundWinner) {
@@ -172,15 +214,18 @@ export const timerService = {
       // else tied → roundWinner stays null
     }
 
-    if (roundWinner) {
-      const roundWinnerColumn = `round_${round}_winner`;
-      db.prepare(`UPDATE fights SET ${roundWinnerColumn} = ? WHERE id = ?`).run(roundWinner, fightId);
-    }
+    // Una sola transacción: detener timer + ganador del round + reset de contadores
+    const roundFight = db.transaction(() => {
+      stmts.setStopped.run(0, fightId);
+      if (roundWinner) {
+        db.prepare(`UPDATE fights SET round_${round}_winner = ? WHERE id = ?`).run(roundWinner, fightId);
+      }
+      const snapshot = stmts.getFight.get(fightId);
+      stmts.resetRoundScores.run(fightId);
+      return snapshot;
+    })();
 
-    const roundFight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
-
-    const io = getIO();
-    io.emit('round:ended', {
+    emitTo.fight(fightId, 'round:ended', {
       fightId,
       round,
       scoreRed: roundFight.score_red,
@@ -189,10 +234,8 @@ export const timerService = {
       reason
     });
 
-    // Reset scores and gam-jeoms to 0 for the next round (per-round counters)
-    db.prepare('UPDATE fights SET score_red = 0, score_blue = 0, gam_jeom_red = 0, gam_jeom_blue = 0 WHERE id = ?').run(fightId);
-    const resetFight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
-    io.emit('fight:updated', resetFight);
+    const resetFight = stmts.getFight.get(fightId);
+    emitEvents.fightUpdated(resetFight);
 
     // Check for fight winner — best of N (first to ceil(numRounds/2) rounds)
     if (roundWinner) {
@@ -205,10 +248,10 @@ export const timerService = {
       }
       if (redWins >= needed || blueWins >= needed) {
         const finalWinner = redWins >= needed ? 'red' : 'blue';
-        db.prepare("UPDATE fights SET final_winner = ?, status = 'completed' WHERE id = ?").run(finalWinner, fightId);
-        const finalFight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
-        io.emit('fight:result-registered', finalFight);
-        io.emit('fight:updated', finalFight);
+        stmts.setFinalWinner.run(finalWinner, fightId);
+        const finalFight = stmts.getFight.get(fightId);
+        emitEvents.resultRegistered(finalFight);
+        emitEvents.fightUpdated(finalFight);
         return; // Fight is over — do not advance to next round
       }
     }
@@ -217,15 +260,11 @@ export const timerService = {
     if (state.round < config.num_rounds) {
       state.round += 1;
       state.remainingMs = config.round_time_seconds * 1000;
-      db.prepare('UPDATE fights SET current_round = ?, timer_remaining_ms = ? WHERE id = ?').run(state.round, state.remainingMs, fightId);
+      state.durationMs = state.remainingMs;
+      stmts.setRoundAndTime.run(state.round, state.remainingMs, fightId);
 
       // Notify clients of the new round so scoreboard auto-advances
-      io.emit('timer:tick', {
-        fightId,
-        remainingMs: state.remainingMs,
-        round: state.round,
-        running: false
-      });
+      emitTimer('timer:sync', state);
     }
     // If all rounds done, the admin decides manually (no auto-end)
   },
@@ -234,7 +273,7 @@ export const timerService = {
     const state = timers.get(fightId);
     if (!state) return null;
 
-    const fight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
+    const fight = stmts.getFight.get(fightId);
     if (!fight) return null;
 
     const config = ScoringConfig.getByTournament(fight.tournament_id);
@@ -243,16 +282,16 @@ export const timerService = {
 
     state.round = Math.min(state.round + 1, config.num_rounds);
     state.remainingMs = config.round_time_seconds * 1000;
+    state.durationMs = state.remainingMs;
 
-    db.prepare('UPDATE fights SET current_round = ?, timer_remaining_ms = ? WHERE id = ?').run(state.round, state.remainingMs, fightId);
+    stmts.setRoundAndTime.run(state.round, state.remainingMs, fightId);
 
-    const io = getIO();
-    io.emit('timer:tick', { fightId, remainingMs: state.remainingMs, round: state.round, running: false });
+    emitTimer('timer:sync', state);
     return state;
   },
 
   setRound(fightId, round) {
-    const fight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
+    const fight = stmts.getFight.get(fightId);
     if (!fight) throw new Error('Pelea no encontrada');
 
     const config = ScoringConfig.getByTournament(fight.tournament_id);
@@ -264,67 +303,58 @@ export const timerService = {
     const ms = config.round_time_seconds * 1000;
 
     if (!state) {
-      state = {
-        interval: null,
-        remainingMs: ms,
-        round,
-        running: false,
-        fightId,
-        tournamentId: fight.tournament_id
-      };
+      state = createState(fight, ms, round);
       timers.set(fightId, state);
     } else {
       state.round = round;
       state.remainingMs = ms;
+      state.durationMs = ms;
       state.running = false;
+      state.startedAt = null;
     }
 
-    // Delete all fight_scores (including gam-jeoms) for this round and reset totals
-    db.prepare('DELETE FROM fight_scores WHERE fight_id = ? AND round = ?').run(fightId, round);
-    db.prepare('DELETE FROM judge_inputs WHERE fight_id = ? AND round = ?').run(fightId, round);
-    db.prepare('UPDATE fights SET current_round = ?, timer_remaining_ms = ?, timer_running = 0, score_red = 0, score_blue = 0, gam_jeom_red = 0, gam_jeom_blue = 0 WHERE id = ?').run(round, ms, fightId);
-
-    // Clear round winners for this round and all subsequent rounds, plus the fight winner
-    const io = getIO();
+    // Delete all fight_scores (including gam-jeoms) for this round, reset totals,
+    // and clear round winners for this round and all subsequent rounds, plus the fight winner
     const setClauses = [];
     for (let r = round; r <= config.num_rounds; r++) {
       setClauses.push(`round_${r}_winner = NULL`);
     }
     setClauses.push('final_winner = NULL');
-    db.prepare(`UPDATE fights SET ${setClauses.join(', ')} WHERE id = ?`).run(fightId);
-    const updatedFight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
-    io.emit('fight:updated', updatedFight);
 
-    io.emit('timer:tick', { fightId, remainingMs: ms, round, running: false });
+    db.transaction(() => {
+      stmts.deleteRoundScores.run(fightId, round);
+      stmts.deleteRoundInputs.run(fightId, round);
+      stmts.setRoundFull.run(round, ms, fightId);
+      db.prepare(`UPDATE fights SET ${setClauses.join(', ')} WHERE id = ?`).run(fightId);
+    })();
+
+    const updatedFight = stmts.getFight.get(fightId);
+    emitEvents.fightUpdated(updatedFight);
+
+    emitTimer('timer:sync', state);
     return state;
   },
 
   setTime(fightId, ms) {
-    const fight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
+    const fight = stmts.getFight.get(fightId);
     if (!fight) throw new Error('Pelea no encontrada');
 
     let state = timers.get(fightId);
     if (state && state.running) this.stop(fightId);
 
     if (!state) {
-      state = {
-        interval: null,
-        remainingMs: ms,
-        round: fight.current_round || 1,
-        running: false,
-        fightId,
-        tournamentId: fight.tournament_id
-      };
+      state = createState(fight, ms);
       timers.set(fightId, state);
     } else {
       state.remainingMs = ms;
+      state.durationMs = ms;
       state.running = false;
+      state.startedAt = null;
     }
 
-    db.prepare('UPDATE fights SET timer_remaining_ms = ?, timer_running = 0 WHERE id = ?').run(ms, fightId);
+    stmts.setStopped.run(ms, fightId);
 
-    const io = getIO();
-    io.emit('timer:tick', { fightId, remainingMs: ms, round: state.round, running: false });
+    emitTimer('timer:sync', state);
     return state;
   },
 
@@ -337,32 +367,27 @@ export const timerService = {
 
     // Cancel any existing Kye Shie for this fight
     const existing = kyeShieTimers.get(fightId);
-    if (existing && existing.interval) {
-      clearInterval(existing.interval);
-    }
+    if (existing?.endTimeout) clearTimeout(existing.endTimeout);
 
-    const io = getIO();
-    let remainingMs = KYE_SHIE_DURATION_MS;
-    const ksState = { interval: null, remainingMs, active: true };
+    const startedAt = Date.now();
+    const ksState = { startedAt, durationMs: KYE_SHIE_DURATION_MS, endTimeout: null, active: true, remainingMs: KYE_SHIE_DURATION_MS };
     kyeShieTimers.set(fightId, ksState);
 
-    io.emit('kye_shie:started', { fightId, remainingMs });
+    emitTo.fight(fightId, 'kye_shie:started', {
+      fightId,
+      remainingMs: KYE_SHIE_DURATION_MS,
+      startedAt,
+      durationMs: KYE_SHIE_DURATION_MS,
+      serverNow: startedAt
+    });
 
-    const startTime = Date.now();
-    ksState.interval = setInterval(() => {
-      const elapsed = Date.now() - startTime;
-      ksState.remainingMs = Math.max(0, KYE_SHIE_DURATION_MS - elapsed);
-
-      io.emit('kye_shie:tick', { fightId, remainingMs: ksState.remainingMs });
-
-      if (ksState.remainingMs <= 0) {
-        clearInterval(ksState.interval);
-        ksState.interval = null;
-        ksState.active = false;
-        kyeShieTimers.delete(fightId);
-        io.emit('kye_shie:ended', { fightId });
-      }
-    }, 200);
+    // Un único timeout en lugar de ticks cada 200ms
+    ksState.endTimeout = setTimeout(() => {
+      ksState.endTimeout = null;
+      ksState.active = false;
+      kyeShieTimers.delete(fightId);
+      emitTo.fight(fightId, 'kye_shie:ended', { fightId });
+    }, KYE_SHIE_DURATION_MS);
 
     return ksState;
   },
@@ -371,32 +396,34 @@ export const timerService = {
     const ksState = kyeShieTimers.get(fightId);
     if (!ksState) return;
 
-    if (ksState.interval) {
-      clearInterval(ksState.interval);
-      ksState.interval = null;
+    if (ksState.endTimeout) {
+      clearTimeout(ksState.endTimeout);
+      ksState.endTimeout = null;
     }
     ksState.active = false;
     kyeShieTimers.delete(fightId);
 
-    const io = getIO();
-    io.emit('kye_shie:ended', { fightId });
+    emitTo.fight(fightId, 'kye_shie:ended', { fightId });
   },
 
   getKyeShieState(fightId) {
-    return kyeShieTimers.get(fightId) || null;
+    const ks = kyeShieTimers.get(fightId);
+    if (!ks) return null;
+    return {
+      active: true,
+      startedAt: ks.startedAt,
+      durationMs: ks.durationMs,
+      remainingMs: Math.max(0, ks.durationMs - (Date.now() - ks.startedAt))
+    };
   },
 
   cleanup(fightId) {
     const state = timers.get(fightId);
-    if (state && state.interval) {
-      clearInterval(state.interval);
-    }
+    clearEndTimeout(state);
     timers.delete(fightId);
 
     const ksState = kyeShieTimers.get(fightId);
-    if (ksState && ksState.interval) {
-      clearInterval(ksState.interval);
-    }
+    if (ksState?.endTimeout) clearTimeout(ksState.endTimeout);
     kyeShieTimers.delete(fightId);
   }
 };

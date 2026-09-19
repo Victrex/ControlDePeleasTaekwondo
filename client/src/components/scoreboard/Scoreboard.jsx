@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useSocket } from "../../contexts/SocketContext";
+import { useSocket, useSocketRoom } from "../../contexts/SocketContext";
+import { useServerTimer, normalizeTimer } from "../../hooks/useServerTimer";
 import { RotateCcw, Sparkles, Zap, Pause, SkipForward } from 'lucide-react';
 import api from "../../utils/api";
 import "./Scoreboard.css";
@@ -41,15 +42,20 @@ function formatTime(ms) {
 export default function Scoreboard() {
   const { fightId } = useParams();
   const navigate = useNavigate();
-  const { socket, connected } = useSocket();
+  const { socket, connected, reconnectCount } = useSocket();
 
   const [fight, setFight] = useState(null);
   const [config, setConfig] = useState(null);
+  // Estado del timer basado en timestamps del servidor (ver useServerTimer)
   const [timer, setTimer] = useState({
     remainingMs: 0,
     round: 1,
     running: false,
+    startedAt: null,
+    durationMs: null,
+    clockOffset: 0,
   });
+  const remainingMs = useServerTimer(timer, { hundredths: true });
   const [scoreRed, setScoreRed] = useState(0);
   const [scoreBlue, setScoreBlue] = useState(0);
   const [gamJeomRed, setGamJeomRed] = useState(0);
@@ -65,9 +71,10 @@ export default function Scoreboard() {
   // Rest timer
   const [restMs, setRestMs] = useState(0);
   const [showingRest, setShowingRest] = useState(false);
-  // Kye Shie
-  const [kyeShieMs, setKyeShieMs] = useState(60000);
-  const [kyeShieActive, setKyeShieActive] = useState(false);
+  // Kye Shie (cuenta atrás local a partir de startedAt/durationMs del servidor)
+  const [kyeShie, setKyeShie] = useState(null);
+  const kyeShieMs = useServerTimer(kyeShie, { hundredths: true });
+  const kyeShieActive = !!kyeShie?.running;
 
   const [currentFightModal, setCurrentFightModal] = useState(null); // null | { message, fightId }
 
@@ -80,15 +87,16 @@ export default function Scoreboard() {
   const roundResultTimerRef = useRef(null);
   const restIntervalRef = useRef(null);
 
+  // Room de la pelea (se re-une automáticamente al reconectar)
+  useSocketRoom(socket, "join:fight", "leave:fight", fightId ? parseInt(fightId) : null);
+
   function playSound(src) {
     const audio = new Audio(src);
     audio.play().catch((e) => console.warn('Audio error:', e));
   }
 
-  // Load initial state
-  useEffect(() => {
+  const loadState = useCallback(() => {
     if (!fightId) return;
-
     api
       .getScoringState(fightId)
       .then((data) => {
@@ -99,24 +107,35 @@ export default function Scoreboard() {
         setGamJeomRed(data.fight.gam_jeom_red || 0);
         setGamJeomBlue(data.fight.gam_jeom_blue || 0);
         setRound(data.timer.round);
-        setTimer(data.timer);
+        setTimer(normalizeTimer({ ...data.timer, serverNow: data.timer.serverNow ?? data.serverNow }));
+        setKyeShie(
+          data.kyeShie?.active
+            ? normalizeTimer({ ...data.kyeShie, running: true, serverNow: data.serverNow })
+            : null,
+        );
         setRoundWinners({
           1: data.fight.round_1_winner,
           2: data.fight.round_2_winner,
           3: data.fight.round_3_winner,
         });
-        if (data.fight.final_winner) {
-          setFightResult({ winner: data.fight.final_winner });
-        }
+        setFightResult(data.fight.final_winner ? { winner: data.fight.final_winner } : null);
       })
       .catch((err) => console.error("Error loading scoring state:", err));
   }, [fightId]);
 
+  // Load initial state
+  useEffect(() => {
+    loadState();
+  }, [loadState]);
+
+  // Tras reconectar, re-sincronizar (pudimos perder eventos)
+  useEffect(() => {
+    if (reconnectCount > 0) loadState();
+  }, [reconnectCount, loadState]);
+
   // Socket events
   useEffect(() => {
     if (!socket) return;
-
-    socket.emit("join-scoreboard", { fightId });
 
     const handleScoreAwarded = (data) => {
       if (String(data.fightId) !== String(fightIdRef.current)) return;
@@ -147,24 +166,17 @@ export default function Scoreboard() {
       playSound('/gamyeom.mp3');
     };
 
-    const handleTimerTick = (data) => {
+    // Sincronización discreta del timer (reset, cambio de round, set time). No hay ticks.
+    const handleTimerSync = (data) => {
       if (String(data.fightId) !== String(fightIdRef.current)) return;
-      setTimer({
-        remainingMs: data.remainingMs,
-        round: data.round,
-        running: data.running,
-      });
+      setTimer((prev) => normalizeTimer(data, prev));
       setRound(data.round);
     };
 
     const handleTimerStarted = (data) => {
       if (String(data.fightId) !== String(fightIdRef.current)) return;
-      setTimer((prev) => ({
-        ...prev,
-        running: true,
-        remainingMs: data.remainingMs,
-        round: data.round,
-      }));
+      setTimer((prev) => normalizeTimer(data, prev));
+      setRound(data.round);
       setRoundEnded(false);
       setRoundResult(null);
       setShowingRest(false);
@@ -184,11 +196,7 @@ export default function Scoreboard() {
 
     const handleTimerStopped = (data) => {
       if (String(data.fightId) !== String(fightIdRef.current)) return;
-      setTimer((prev) => ({
-        ...prev,
-        running: false,
-        remainingMs: data.remainingMs,
-      }));
+      setTimer((prev) => normalizeTimer(data, prev));
     };
 
     const handleRoundEnded = (data) => {
@@ -201,6 +209,8 @@ export default function Scoreboard() {
         ...prev,
         running: false,
         remainingMs: 0,
+        startedAt: null,
+        durationMs: null,
       }));
       setShowingRest(false);
       setRound(data.round);
@@ -229,10 +239,16 @@ export default function Scoreboard() {
         setRestMs(remaining);
         setShowingRest(true);
         const startTime = Date.now();
+        // Cuenta atrás de descanso: sólo re-renderizar cuando cambia el valor visible
+        let lastKey = null;
         restIntervalRef.current = setInterval(() => {
           const elapsed = Date.now() - startTime;
           remaining = Math.max(0, restSeconds * 1000 - elapsed);
-          setRestMs(remaining);
+          const key = remaining <= 10000 ? Math.floor(remaining / 10) : Math.ceil(remaining / 1000);
+          if (key !== lastKey) {
+            lastKey = key;
+            setRestMs(remaining);
+          }
           if (remaining <= 0) {
             clearInterval(restIntervalRef.current);
             restIntervalRef.current = null;
@@ -278,32 +294,24 @@ export default function Scoreboard() {
 
     const handleKyeShieStarted = (data) => {
       if (String(data.fightId) !== String(fightIdRef.current)) return;
-      setKyeShieActive(true);
-      setKyeShieMs(data.remainingMs);
-    };
-
-    const handleKyeShieTick = (data) => {
-      if (String(data.fightId) !== String(fightIdRef.current)) return;
-      setKyeShieMs(data.remainingMs);
+      setKyeShie(normalizeTimer({ ...data, running: true }));
     };
 
     const handleKyeShieEnded = (data) => {
       if (String(data.fightId) !== String(fightIdRef.current)) return;
-      setKyeShieActive(false);
-      setKyeShieMs(60000);
+      setKyeShie(null);
     };
 
     socket.on("score:awarded", handleScoreAwarded);
     socket.on("score:edited", handleScoreEdited);
     socket.on("gam_jeom:added", handleGamJeom);
-    socket.on("timer:tick", handleTimerTick);
+    socket.on("timer:sync", handleTimerSync);
     socket.on("timer:started", handleTimerStarted);
     socket.on("timer:stopped", handleTimerStopped);
     socket.on("round:ended", handleRoundEnded);
     socket.on("fight:updated", handleFightUpdated);
     socket.on("judge:voted", handleJudgeVoted);
     socket.on("kye_shie:started", handleKyeShieStarted);
-    socket.on("kye_shie:tick", handleKyeShieTick);
     socket.on("kye_shie:ended", handleKyeShieEnded);
     socket.on("fight:result-registered", handleFightResultRegistered);
 
@@ -311,21 +319,21 @@ export default function Scoreboard() {
       socket.off("score:awarded", handleScoreAwarded);
       socket.off("score:edited", handleScoreEdited);
       socket.off("gam_jeom:added", handleGamJeom);
-      socket.off("timer:tick", handleTimerTick);
+      socket.off("timer:sync", handleTimerSync);
       socket.off("timer:started", handleTimerStarted);
       socket.off("timer:stopped", handleTimerStopped);
       socket.off("round:ended", handleRoundEnded);
       socket.off("fight:updated", handleFightUpdated);
       socket.off("judge:voted", handleJudgeVoted);
       socket.off("kye_shie:started", handleKyeShieStarted);
-      socket.off("kye_shie:tick", handleKyeShieTick);
       socket.off("kye_shie:ended", handleKyeShieEnded);
       socket.off("fight:result-registered", handleFightResultRegistered);
       if (roundEndTimerRef.current) clearTimeout(roundEndTimerRef.current);
       if (roundResultTimerRef.current) clearTimeout(roundResultTimerRef.current);
       if (restIntervalRef.current) clearInterval(restIntervalRef.current);
+      if (judgeVoteTimer.current) clearTimeout(judgeVoteTimer.current);
     };
-  }, [socket, fightId]);
+  }, [socket]);
 
   const roundResultReasonLabel =
     roundResult?.reason === "gap_point"
@@ -377,8 +385,8 @@ export default function Scoreboard() {
   const numRounds = config?.num_rounds || 3;
   const bracketRoundLabel = fight.bracket_round || "";
   const matchLabel = fight.fight_number ? `MATCH ${fight.fight_number}` : "";
-  const timerLow = timer.remainingMs <= 30000 && timer.remainingMs > 0;
-  const timerCritical = timer.remainingMs <= 10000 && timer.remainingMs > 0;
+  const timerLow = remainingMs <= 30000 && remainingMs > 0;
+  const timerCritical = remainingMs <= 10000 && remainingMs > 0;
 
   return (
     <div className="scoreboard">
@@ -538,7 +546,7 @@ export default function Scoreboard() {
             <div
               className={`sb-timer ${timer.running ? "timer-running" : "timer-stopped"} ${timerCritical ? "timer-critical" : timerLow ? "timer-low" : ""}`}
             >
-              {formatTime(timer.remainingMs)}
+              {formatTime(remainingMs)}
             </div>
             {/* Last action flash */}
             {lastAction && (

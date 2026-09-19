@@ -1,13 +1,15 @@
 import db from '../config/database.js';
 import { Score } from '../models/Score.js';
 import { ScoringConfig } from '../models/ScoringConfig.js';
-import { getIO } from '../config/socket.js';
+import { emitTo, emitEvents } from '../config/socket.js';
 import { timerService } from './timerService.js';
+
+const getFightStmt = db.prepare('SELECT * FROM fights WHERE id = ?');
 
 export const scoringService = {
 
   processJudgeInput(fightId, judgeId, team, action, timestamp) {
-    const fight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
+    const fight = getFightStmt.get(fightId);
     if (!fight) throw new Error('Pelea no encontrada');
     if (fight.status !== 'current') throw new Error('La pelea no está en curso');
     if (!fight.timer_running) throw new Error('El timer no está corriendo');
@@ -32,10 +34,8 @@ export const scoringService = {
       ? config.min_judges_agree
       : Math.ceil(config.num_judges / 2);
 
-    const io = getIO();
-
     // Emit judge:voted so scoreboard shows partial votes in real-time
-    io.emit('judge:voted', {
+    emitTo.fight(fightId, 'judge:voted', {
       fightId,
       team,
       action,
@@ -64,10 +64,9 @@ export const scoringService = {
       const col = team === 'red' ? 'score_red' : 'score_blue';
       db.prepare(`UPDATE fights SET ${col} = ${col} + ? WHERE id = ?`).run(points, fightId);
 
-      const updatedFight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
+      const updatedFight = getFightStmt.get(fightId);
 
-      const io = getIO();
-      io.emit('score:awarded', {
+      emitTo.fight(fightId, 'score:awarded', {
         fightId,
         team,
         action,
@@ -77,13 +76,13 @@ export const scoringService = {
         round,
         scoreId: score.id
       });
-      io.emit('fight:updated', updatedFight);
+      emitEvents.fightUpdated(updatedFight);
 
       // Check gap point rule: this wins the round and ends it immediately
       const diff = Math.abs(updatedFight.score_red - updatedFight.score_blue);
       if (diff >= config.gap_point) {
         const winner = updatedFight.score_red > updatedFight.score_blue ? 'red' : 'blue';
-        io.emit('fight:gap_point_win', {
+        emitTo.fight(fightId, 'fight:gap_point_win', {
           fightId,
           winner,
           round,
@@ -100,7 +99,7 @@ export const scoringService = {
   },
 
   addGamJeom(fightId, team) {
-    const fight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
+    const fight = getFightStmt.get(fightId);
     if (!fight) throw new Error('Pelea no encontrada');
 
     const config = ScoringConfig.getByTournament(fight.tournament_id);
@@ -125,7 +124,7 @@ export const scoringService = {
       timestamp: Date.now()
     });
 
-    const updatedFight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
+    const updatedFight = getFightStmt.get(fightId);
 
     // Count per-round gam-jeom for the offending team
     // gam_jeom events are recorded for the OPPONENT team, so to count fouls
@@ -135,8 +134,7 @@ export const scoringService = {
       WHERE fight_id = ? AND round = ? AND team = ? AND action = 'gam_jeom'
     `).get(fightId, round, opponentTeam).cnt;
 
-    const io = getIO();
-    io.emit('gam_jeom:added', {
+    emitTo.fight(fightId, 'gam_jeom:added', {
       fightId,
       team,
       gamJeomRed: updatedFight.gam_jeom_red,
@@ -146,12 +144,12 @@ export const scoringService = {
       round,
       roundGamJeom // number of gam-jeoms the offending team has THIS round
     });
-    io.emit('fight:updated', updatedFight);
+    emitEvents.fightUpdated(updatedFight);
 
     // Punitive loss: per-round check. Reaching the max gam-jeom loses the round.
     if (roundGamJeom >= config.max_gam_jeom) {
       const winner = team === 'red' ? 'blue' : 'red';
-      io.emit('fight:punitive_win', {
+      emitTo.fight(fightId, 'fight:punitive_win', {
         fightId,
         winner,
         reason: 'gam_jeom_limit',
@@ -167,7 +165,7 @@ export const scoringService = {
     const diff = Math.abs(updatedFight.score_red - updatedFight.score_blue);
     if (diff >= config.gap_point) {
       const winner = updatedFight.score_red > updatedFight.score_blue ? 'red' : 'blue';
-      io.emit('fight:gap_point_win', {
+      emitTo.fight(fightId, 'fight:gap_point_win', {
         fightId,
         winner,
         round,
@@ -181,7 +179,7 @@ export const scoringService = {
   },
 
   removeGamJeom(fightId, team) {
-    const fight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
+    const fight = getFightStmt.get(fightId);
     if (!fight) throw new Error('Pelea no encontrada');
 
     const config = ScoringConfig.getByTournament(fight.tournament_id);
@@ -207,10 +205,9 @@ export const scoringService = {
       db.prepare('DELETE FROM fight_scores WHERE id = ?').run(lastGamJeomScore.id);
     }
 
-    const updatedFight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
+    const updatedFight = getFightStmt.get(fightId);
 
-    const io = getIO();
-    io.emit('gam_jeom:added', {
+    emitTo.fight(fightId, 'gam_jeom:added', {
       fightId,
       team,
       gamJeomRed: updatedFight.gam_jeom_red,
@@ -219,12 +216,13 @@ export const scoringService = {
       scoreBlue: updatedFight.score_blue,
       round: fight.current_round
     });
+    emitEvents.fightUpdated(updatedFight);
 
     return updatedFight;
   },
 
   adminAddScore(fightId, team, action) {
-    const fight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
+    const fight = getFightStmt.get(fightId);
     if (!fight) throw new Error('Pelea no encontrada');
 
     const config = ScoringConfig.getByTournament(fight.tournament_id);
@@ -243,10 +241,9 @@ export const scoringService = {
     const col = team === 'red' ? 'score_red' : 'score_blue';
     db.prepare(`UPDATE fights SET ${col} = ${col} + ? WHERE id = ?`).run(points, fightId);
 
-    const updatedFight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
+    const updatedFight = getFightStmt.get(fightId);
 
-    const io = getIO();
-    io.emit('score:awarded', {
+    emitTo.fight(fightId, 'score:awarded', {
       fightId,
       team,
       action,
@@ -256,13 +253,13 @@ export const scoringService = {
       round,
       scoreId: score.id
     });
-    io.emit('fight:updated', updatedFight);
+    emitEvents.fightUpdated(updatedFight);
 
     // Check gap point rule: this wins the round and ends it immediately
     const diff = Math.abs(updatedFight.score_red - updatedFight.score_blue);
     if (diff >= config.gap_point) {
       const winner = updatedFight.score_red > updatedFight.score_blue ? 'red' : 'blue';
-      io.emit('fight:gap_point_win', {
+      emitTo.fight(fightId, 'fight:gap_point_win', {
         fightId,
         winner,
         round,
@@ -276,69 +273,66 @@ export const scoringService = {
   },
 
   editScore(fightId, scoreId, newPoints) {
-    const fight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
+    const fight = getFightStmt.get(fightId);
     if (!fight) throw new Error('Pelea no encontrada');
     if (fight.timer_running) throw new Error('No se pueden editar puntos con el timer corriendo');
 
     const updated = Score.updatePoints(scoreId, newPoints);
     if (!updated) throw new Error('Score no encontrado');
 
-    const updatedFight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
+    const updatedFight = getFightStmt.get(fightId);
 
-    const io = getIO();
-    io.emit('score:edited', {
+    emitTo.fight(fightId, 'score:edited', {
       fightId,
       scoreRed: updatedFight.score_red,
       scoreBlue: updatedFight.score_blue
     });
-    io.emit('fight:updated', updatedFight);
+    emitEvents.fightUpdated(updatedFight);
 
     return updatedFight;
   },
 
   deleteScore(fightId, scoreId) {
-    const fight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
+    const fight = getFightStmt.get(fightId);
     if (!fight) throw new Error('Pelea no encontrada');
     if (fight.timer_running) throw new Error('No se pueden eliminar puntos con el timer corriendo');
 
     const deleted = Score.delete(scoreId);
     if (!deleted) throw new Error('Score no encontrado');
 
-    const updatedFight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
+    const updatedFight = getFightStmt.get(fightId);
 
-    const io = getIO();
-    io.emit('score:edited', {
+    emitTo.fight(fightId, 'score:edited', {
       fightId,
       scoreRed: updatedFight.score_red,
       scoreBlue: updatedFight.score_blue
     });
-    io.emit('fight:updated', updatedFight);
+    emitEvents.fightUpdated(updatedFight);
 
     return updatedFight;
   },
 
   setScore(fightId, team, newScore) {
-    const fight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
+    const fight = getFightStmt.get(fightId);
     if (!fight) throw new Error('Pelea no encontrada');
 
     const col = team === 'red' ? 'score_red' : 'score_blue';
     db.prepare(`UPDATE fights SET ${col} = ? WHERE id = ?`).run(newScore, fightId);
 
-    const updatedFight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
+    const updatedFight = getFightStmt.get(fightId);
 
-    const io = getIO();
-    io.emit('score:edited', {
+    emitTo.fight(fightId, 'score:edited', {
       fightId,
       scoreRed: updatedFight.score_red,
       scoreBlue: updatedFight.score_blue
     });
-    io.emit('fight:updated', updatedFight);
+    emitEvents.fightUpdated(updatedFight);
 
     return updatedFight;
   },
 
   clearCurrentRoundScore(fightId) {
-    const fight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
+    const fight = getFightStmt.get(fightId);
     if (!fight) throw new Error('Pelea no encontrada');
     if (fight.timer_running) throw new Error('Detén el timer antes de limpiar el score actual');
 
@@ -351,15 +345,14 @@ export const scoringService = {
     });
     tx();
 
-    const updatedFight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
+    const updatedFight = getFightStmt.get(fightId);
 
-    const io = getIO();
-    io.emit('score:edited', {
+    emitTo.fight(fightId, 'score:edited', {
       fightId,
       scoreRed: updatedFight.score_red,
       scoreBlue: updatedFight.score_blue
     });
-    io.emit('fight:updated', updatedFight);
+    emitEvents.fightUpdated(updatedFight);
 
     return updatedFight;
   },
