@@ -1,18 +1,51 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
-import { useSocket } from '../../contexts/SocketContext';
+import { useSocket, useSocketRoom } from '../../contexts/SocketContext';
 import { Swords, Trophy, Circle, ClipboardList, CheckCircle2 } from 'lucide-react';
 import api from '../../utils/api';
+import { log, error as logError } from '../../utils/logger';
+
+// Aplica un cambio de "pelea actual": la pelea recibida pasa a current y las demás
+// current de la misma pista (o todas si no hay pista) vuelven a pending — mismo criterio que el servidor.
+function applyCurrentChanged(fights, fight) {
+  const pista = fight.pista;
+  let found = false;
+  const next = fights.map(f => {
+    if (f.id === fight.id) {
+      found = true;
+      return { ...f, ...fight, status: 'current' };
+    }
+    if (f.status === 'current' && (!pista || f.pista === pista)) {
+      return { ...f, status: 'pending' };
+    }
+    return f;
+  });
+  if (!found) next.push({ ...fight, status: 'current' });
+  return next;
+}
+
+function upsertFight(fights, fight) {
+  const idx = fights.findIndex(f => f.id === fight.id);
+  if (idx === -1) {
+    return [...fights, fight].sort((a, b) => a.order_index - b.order_index);
+  }
+  const next = fights.slice();
+  next[idx] = { ...next[idx], ...fight };
+  // Si cambió order_index, mantener el orden del servidor
+  if (fights[idx].order_index !== fight.order_index) {
+    next.sort((a, b) => a.order_index - b.order_index);
+  }
+  return next;
+}
 
 export default function PublicDisplay() {
   const { tournamentId } = useParams();
-  const { socket, connected } = useSocket();
+  const { socket, connected, reconnectCount } = useSocket();
   
   const [tournaments, setTournaments] = useState([]);
   const [selectedTournament, setSelectedTournament] = useState(null);
-  const [currentFight, setCurrentFight] = useState(null);
-  const [nextFights, setNextFights] = useState([]);
-  const [completedFights, setCompletedFights] = useState([]);
+  // Todas las peleas del torneo seleccionado; se carga UNA vez y se actualiza por deltas de socket
+  const [fights, setFights] = useState([]);
   const [activeTab, setActiveTab] = useState('pending'); // 'pending' | 'completed'
   const [loading, setLoading] = useState(true);
   const [brackets, setBrackets] = useState([]);
@@ -21,7 +54,14 @@ export default function PublicDisplay() {
   const [fightWinner, setFightWinner] = useState(null);
   const [selectedPista, setSelectedPista] = useState(null);
   const selectedPistaRef = useRef(null);
+  const selectedTournamentIdRef = useRef(null);
   const winnerTimeoutRef = useRef(null);
+
+  selectedPistaRef.current = selectedPista;
+  selectedTournamentIdRef.current = selectedTournament?.id ?? null;
+
+  // Room del torneo (se re-une automáticamente al reconectar)
+  useSocketRoom(socket, 'join:tournament', 'leave:tournament', selectedTournament?.id);
 
   useEffect(() => {
     loadTournaments();
@@ -40,33 +80,20 @@ export default function PublicDisplay() {
     }
   }, [tournamentId, tournaments]);
 
+  // Carga inicial del torneo seleccionado (una sola petición de peleas)
   useEffect(() => {
-    if (selectedTournament) {
-      console.log('🎯 Torneo seleccionado cambiado:', selectedTournament);
-      loadCurrentFight();
-      loadNextFights();
-      loadBrackets();
-      
-      // Unirse a la sala del torneo
-      if (socket) {
-        socket.emit('join:tournament', selectedTournament.id);
-      }
-    }
-    
-    return () => {
-      if (socket && selectedTournament) {
-        socket.emit('leave:tournament', selectedTournament.id);
-      }
-    };
-  }, [selectedTournament, socket]);
+    if (!selectedTournament) return;
+    log('🎯 Torneo seleccionado cambiado:', selectedTournament.id);
+    loadFights(selectedTournament.id);
+    loadBrackets(selectedTournament.id);
+  }, [selectedTournament]);
 
+  // Tras una reconexión pudimos perder eventos: re-sincronizar estado completo
   useEffect(() => {
-    selectedPistaRef.current = selectedPista;
-    if (selectedTournament) {
-      loadCurrentFight();
-      loadNextFights();
+    if (reconnectCount > 0 && selectedTournamentIdRef.current) {
+      loadFights(selectedTournamentIdRef.current);
     }
-  }, [selectedPista]);
+  }, [reconnectCount]);
 
   useEffect(() => {
     if (selectedBracket) {
@@ -74,21 +101,85 @@ export default function PublicDisplay() {
     }
   }, [selectedBracket]);
 
+  // Listeners de socket: registrados UNA vez por socket; usan refs para el estado actual
   useEffect(() => {
-    if (socket) {
-      socket.on('fight:updated', handleFightUpdate);
-      socket.on('fight:current-changed', handleCurrentFightChange);
-      socket.on('fight:created', handleFightUpdate);
-      socket.on('fight:result-registered', handleResultRegistered);
-      
-      return () => {
-        socket.off('fight:updated');
-        socket.off('fight:current-changed');
-        socket.off('fight:created');
-        socket.off('fight:result-registered');
-      };
-    }
-  }, [socket, selectedTournament]);
+    if (!socket) return undefined;
+
+    const isMine = (fight) => {
+      const tid = fight?.tournament_id ?? fight?.tournamentId;
+      return tid != null && tid === selectedTournamentIdRef.current;
+    };
+
+    const handleFightUpdate = (fight) => {
+      if (!isMine(fight)) return;
+      setFights(prev => upsertFight(prev, fight));
+    };
+
+    const handleFightCreated = (fight) => {
+      if (!isMine(fight)) return;
+      setFights(prev => upsertFight(prev, fight));
+    };
+
+    const handleFightDeleted = (fightId) => {
+      setFights(prev => prev.some(f => f.id === fightId) ? prev.filter(f => f.id !== fightId) : prev);
+    };
+
+    const handleCurrentFightChange = (fight) => {
+      if (!isMine(fight)) return;
+      setFights(prev => applyCurrentChanged(prev, fight));
+    };
+
+    const handleOrderChanged = (list) => {
+      if (!Array.isArray(list) || list.length === 0) return;
+      if (!isMine(list[0])) return;
+      setFights(list);
+    };
+
+    const handleResultRegistered = (data) => {
+      if (!isMine(data)) return;
+      // El payload es la pelea completa: actualizar estado local sin peticiones HTTP
+      setFights(prev => upsertFight(prev, data));
+
+      const pista = selectedPistaRef.current;
+      if (pista && data.pista && data.pista !== pista) return;
+
+      let winnerName = '';
+      let winnerColor = '';
+      if (data.final_winner === 'red') {
+        winnerName = data.competitor_red || 'Rojo';
+        winnerColor = 'red';
+      } else if (data.final_winner === 'blue') {
+        winnerName = data.competitor_blue || 'Azul';
+        winnerColor = 'blue';
+      }
+
+      if (winnerName && winnerColor) {
+        setFightWinner({ name: winnerName, color: winnerColor });
+        if (winnerTimeoutRef.current) clearTimeout(winnerTimeoutRef.current);
+        // Después de 10 segundos, ocultar el ganador (el estado ya está actualizado por socket)
+        winnerTimeoutRef.current = setTimeout(() => {
+          setFightWinner(null);
+          winnerTimeoutRef.current = null;
+        }, 10000);
+      }
+    };
+
+    socket.on('fight:updated', handleFightUpdate);
+    socket.on('fight:created', handleFightCreated);
+    socket.on('fight:deleted', handleFightDeleted);
+    socket.on('fight:current-changed', handleCurrentFightChange);
+    socket.on('fights:order-changed', handleOrderChanged);
+    socket.on('fight:result-registered', handleResultRegistered);
+
+    return () => {
+      socket.off('fight:updated', handleFightUpdate);
+      socket.off('fight:created', handleFightCreated);
+      socket.off('fight:deleted', handleFightDeleted);
+      socket.off('fight:current-changed', handleCurrentFightChange);
+      socket.off('fights:order-changed', handleOrderChanged);
+      socket.off('fight:result-registered', handleResultRegistered);
+    };
+  }, [socket]);
 
   // Limpiar timeout al desmontar
   useEffect(() => {
@@ -99,88 +190,11 @@ export default function PublicDisplay() {
     };
   }, []);
 
-  const handleResultRegistered = (data) => {
-    console.log('fight:result-registered recibido:', data);
-    const tournamentIdFromData = data?.tournament_id || data?.tournamentId;
-    if (selectedTournament && (!tournamentIdFromData || tournamentIdFromData === selectedTournament.id)) {
-      const pista = selectedPistaRef.current;
-      // Si hay filtro de pista y la pelea no es de esa pista, solo recargar listas
-      if (pista && data.pista && data.pista !== pista) {
-        loadNextFights();
-        return;
-      }
-
-      let winnerName = '';
-      let winnerColor = '';
-      
-      const finalWinner = data.final_winner;
-      
-      if (finalWinner === 'red') {
-        winnerName = data.competitor_red || currentFight?.competitor_red || 'Rojo';
-        winnerColor = 'red';
-      } else if (finalWinner === 'blue') {
-        winnerName = data.competitor_blue || currentFight?.competitor_blue || 'Azul';
-        winnerColor = 'blue';
-      }
-      
-      if (winnerName && winnerColor) {
-        console.log('Mostrando ganador:', winnerName, winnerColor);
-        // Mostrar el ganador
-        setFightWinner({ name: winnerName, color: winnerColor });
-        
-        // Limpiar timeout anterior si existe
-        if (winnerTimeoutRef.current) {
-          clearTimeout(winnerTimeoutRef.current);
-        }
-        
-        // Después de 10 segundos, ocultar el ganador y cargar siguiente pelea
-        winnerTimeoutRef.current = setTimeout(() => {
-          setFightWinner(null);
-          loadCurrentFight();
-          loadNextFights();
-          if (selectedBracket) {
-            loadBracketMatches(selectedBracket.id);
-          }
-        }, 10000);
-      } else {
-        // Es un resultado parcial (round), solo actualizar la pelea actual
-        loadCurrentFight();
-      }
-    }
-  };
-
-  const handleFightUpdate = (data) => {
-    const tournamentIdFromData = data?.tournament_id || data?.tournamentId;
-    if (selectedTournament && (!tournamentIdFromData || tournamentIdFromData === selectedTournament.id)) {
-      loadCurrentFight();
-      loadNextFights();
-      if (selectedBracket) {
-        loadBracketMatches(selectedBracket.id);
-      }
-    }
-  };
-
-  const handleCurrentFightChange = (fight) => {
-    // El evento emite la pelea directamente
-    if (selectedTournament && fight?.tournament_id === selectedTournament.id) {
-      const pista = selectedPistaRef.current;
-      // Solo actualizar directamente si coincide con la pista seleccionada (o no hay filtro)
-      if (!pista || fight.pista === pista) {
-        setCurrentFight(fight);
-      }
-      loadCurrentFight();
-      loadNextFights();
-    } else if (selectedTournament) {
-      loadCurrentFight();
-      loadNextFights();
-    }
-  };
-
   const loadTournaments = async () => {
     try {
       // Cargar todos los torneos para mostrarlos en la lista
       const allTournaments = await api.getTournaments();
-      console.log('🏆 Todos los torneos cargados:', allTournaments);
+      log('🏆 Torneos cargados:', allTournaments?.length);
       
       setTournaments(allTournaments || []);
       
@@ -188,65 +202,35 @@ export default function PublicDisplay() {
       if (allTournaments && allTournaments.length > 0 && !selectedTournament) {
         const activeTournament = allTournaments.find(t => t.status === 'active');
         const tournamentToSelect = activeTournament || allTournaments[0];
-        console.log('✅ Seleccionando torneo automáticamente:', tournamentToSelect);
         setSelectedTournament(tournamentToSelect);
       }
-    } catch (error) {
-      console.error('Error cargando torneos:', error);
+    } catch (err) {
+      logError('Error cargando torneos:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const loadCurrentFight = async () => {
-    if (!selectedTournament) {
-      console.log('⚠️ loadCurrentFight: No hay torneo seleccionado');
-      return;
-    }
+  const loadFights = async (tid) => {
     try {
-      const pista = selectedPistaRef.current;
-      console.log('🔄 Cargando pelea actual para torneo:', selectedTournament.id, 'pista:', pista);
-      const data = await api.getCurrentFight(selectedTournament.id, pista);
-      console.log('⚔️ Pelea actual cargada:', data);
-      setCurrentFight(data);
-    } catch (error) {
-      console.log('⚠️ No hay pelea actual o error:', error.message);
-      setCurrentFight(null);
+      const data = await api.getFights(tid);
+      // Evitar aplicar una respuesta tardía de un torneo que ya no está seleccionado
+      if (selectedTournamentIdRef.current !== tid) return;
+      setFights(Array.isArray(data) ? data : []);
+    } catch (err) {
+      logError('Error cargando peleas:', err);
     }
   };
 
-  const loadNextFights = async () => {
-    if (!selectedTournament) {
-      console.log('⚠️ loadNextFights: No hay torneo seleccionado');
-      return;
-    }
+  const loadBrackets = async (tid) => {
     try {
-      console.log('🔄 Cargando peleas para torneo:', selectedTournament.id);
-      const fights = await api.getFights(selectedTournament.id);
-      console.log('📋 Todas las peleas:', fights);
-      const pista = selectedPistaRef.current;
-      const filteredFights = pista ? fights.filter(f => f.pista === pista) : fights;
-      const pending = filteredFights.filter(f => f.status === 'pending').slice(0, 10);
-      const completed = filteredFights.filter(f => f.status === 'completed').reverse();
-      console.log('📋 Peleas pendientes:', pending);
-      console.log('✅ Peleas completadas:', completed);
-      setNextFights(pending);
-      setCompletedFights(completed);
-    } catch (error) {
-      console.error('Error cargando próximas peleas:', error);
-    }
-  };
-
-  const loadBrackets = async () => {
-    if (!selectedTournament) return;
-    try {
-      const res = await api.getBracketsByTournament(selectedTournament.id);
+      const res = await api.getBracketsByTournament(tid);
       setBrackets(res || []);
       if (res && res.length > 0) {
         setSelectedBracket(res[0]);
       }
-    } catch (error) {
-      console.error('Error cargando brackets:', error);
+    } catch (err) {
+      logError('Error cargando brackets:', err);
       setBrackets([]);
     }
   };
@@ -255,11 +239,27 @@ export default function PublicDisplay() {
     try {
       const res = await api.getBracketMatches(bracketId);
       setBracketMatches(res || []);
-    } catch (error) {
-      console.error('Error cargando matches del bracket:', error);
+    } catch (err) {
+      logError('Error cargando matches del bracket:', err);
       setBracketMatches([]);
     }
   };
+
+  // Derivados del estado local (misma lógica que antes, sin HTTP por evento)
+  const { currentFight, nextFights, completedFights } = useMemo(() => {
+    const pista = selectedPista;
+    const filtered = pista ? fights.filter(f => f.pista === pista) : fights;
+    const currents = filtered.filter(f => f.status === 'current');
+    // Sin filtro de pista, el servidor devolvía la primera fila (rowid más bajo)
+    const current = currents.length > 0
+      ? currents.reduce((a, b) => (a.id < b.id ? a : b))
+      : null;
+    return {
+      currentFight: current,
+      nextFights: filtered.filter(f => f.status === 'pending').slice(0, 10),
+      completedFights: filtered.filter(f => f.status === 'completed').reverse()
+    };
+  }, [fights, selectedPista]);
 
   // Agrupar matches por ronda
   const matchesByRound = bracketMatches.reduce((acc, m) => {
@@ -282,15 +282,6 @@ export default function PublicDisplay() {
   const champion = bracketMatches.length > 0 && matchesByRound[totalRounds]?.[0]?.winner_id
     ? matchesByRound[totalRounds][0]
     : null;
-
-  // Debug logs
-  console.log('🔍 Estado actual:', {
-    loading,
-    selectedTournament: selectedTournament?.id,
-    currentFight: currentFight?.id,
-    nextFightsCount: nextFights.length,
-    connected
-  });
 
   if (loading) {
     return (

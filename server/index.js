@@ -4,6 +4,7 @@ import session from 'express-session';
 import cors from 'cors';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { existsSync } from 'fs';
 import dotenv from 'dotenv';
 import connectSqlite3 from 'connect-sqlite3';
 
@@ -22,6 +23,12 @@ dotenv.config();
 const app = express();
 const server = createServer(app);
 const PORT = process.env.PORT || 3000;
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const DIST_DIR = join(__dirname, '../dist');
+const HAS_BUILD = existsSync(join(DIST_DIR, 'index.html'));
+
+// Detrás de ngrok (proxy TLS) para que express-session vea req.secure correctamente
+app.set('trust proxy', 1);
 
 // Configurar SQLite session store
 const SQLiteStore = connectSqlite3(session);
@@ -50,7 +57,7 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
+    secure: IS_PRODUCTION,
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000 // 24 horas
   }
@@ -66,12 +73,25 @@ app.use(attachUser);
 // API routes
 app.use('/api', apiRoutes);
 
-// Servir archivos estáticos del cliente en producción
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(join(__dirname, '../dist')));
-  
-  app.get('*', (req, res) => {
-    res.sendFile(join(__dirname, '../dist/index.html'));
+// Servir el frontend construido (npm run build) cuando exista.
+// En desarrollo Vite corre en :5173 con proxy, así que esto no interfiere.
+if (IS_PRODUCTION || HAS_BUILD) {
+  // Assets con hash: cache larga. index.html: sin cache para que los clientes tomen nuevos builds.
+  app.use(express.static(DIST_DIR, {
+    index: false,
+    maxAge: '1y',
+    immutable: true,
+    setHeaders(res, filePath) {
+      if (filePath.endsWith('index.html')) {
+        res.setHeader('Cache-Control', 'no-cache');
+      }
+    }
+  }));
+
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) return next();
+    res.setHeader('Cache-Control', 'no-cache');
+    res.sendFile(join(DIST_DIR, 'index.html'));
   });
 }
 
@@ -84,6 +104,9 @@ async function startServer() {
     // Inicializar base de datos
     await initializeDatabase();
 
+    // Los timers viven en memoria: tras un reinicio ninguno está corriendo
+    db.prepare('UPDATE fights SET timer_running = 0 WHERE timer_running = 1').run();
+
     // Inicializar Socket.IO
     initializeSocket(server);
 
@@ -94,7 +117,8 @@ async function startServer() {
       console.log('🥋 Sistema de Torneos de Taekwondo');
       console.log('═══════════════════════════════════════════════════════');
       console.log(`🚀 Servidor corriendo en: http://localhost:${PORT}`);
-      console.log(`📊 Panel Admin: http://localhost:${PORT}/admin`);
+      console.log(`� Frontend: ${(IS_PRODUCTION || HAS_BUILD) ? 'sirviendo /dist (build)' : 'usar Vite dev (npm run dev) en :5173'}`);
+      console.log(`�📊 Panel Admin: http://localhost:${PORT}/admin`);
       console.log(`👥 Vista Pública: http://localhost:${PORT}/public`);
       console.log(`📺 Scoreboard: http://localhost:${PORT}/scoreboard/:fightId`);
       console.log(`⚖️  Panel Juez: http://localhost:${PORT}/judge/:fightId?judgeId=N`);

@@ -10,6 +10,10 @@ const db = new Database(join(__dirname, '../../database/tournament.db'));
 
 // Habilitar foreign keys
 db.pragma('foreign_keys = ON');
+// WAL: lecturas concurrentes no bloquean escrituras; NORMAL reduce fsyncs por escritura
+db.pragma('journal_mode = WAL');
+db.pragma('synchronous = NORMAL');
+db.pragma('busy_timeout = 3000');
 
 // Inicializar tablas
 export function initializeDatabase() {

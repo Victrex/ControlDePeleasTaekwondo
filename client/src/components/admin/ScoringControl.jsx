@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useSocket } from '../../contexts/SocketContext';
+import { useSocket, useSocketRoom } from '../../contexts/SocketContext';
+import { useServerTimer, normalizeTimer } from '../../hooks/useServerTimer';
 import { Monitor, Scale, Trophy, Circle, RefreshCw, Gamepad2, Crown, AlertTriangle, Target, RotateCcw, Sparkles, Play, Pause, Timer, X, SkipForward, Eraser, Zap, Activity, Check } from 'lucide-react';
 import api from '../../utils/api';
 import './ScoringControl.css';
@@ -46,11 +47,12 @@ function formatTime(ms) {
 
 export default function ScoringControl() {
   const { fightId } = useParams();
-  const { socket, connected } = useSocket();
+  const { socket, connected, reconnectCount } = useSocket();
 
   const [fight, setFight] = useState(null);
   const [config, setConfig] = useState(null);
-  const [timer, setTimer] = useState({ remainingMs: 0, round: 1, running: false });
+  const [timer, setTimer] = useState({ remainingMs: 0, round: 1, running: false, startedAt: null, durationMs: null, clockOffset: 0 });
+  const remainingMs = useServerTimer(timer);
   const [scoreRed, setScoreRed] = useState(0);
   const [scoreBlue, setScoreBlue] = useState(0);
   const [gamJeomRed, setGamJeomRed] = useState(0);
@@ -103,14 +105,25 @@ export default function ScoringControl() {
   mainGamepadRef.current = mainGamepad;
   const timerRunningRef = useRef(timer.running);
   timerRunningRef.current = timer.running;
-  const timerRemainingRef = useRef(timer.remainingMs);
-  timerRemainingRef.current = timer.remainingMs;
+  // remainingMs se calcula localmente (modelo timestamp); el ref lo lee el poll de gamepads
+  const timerRemainingRef = useRef(remainingMs);
+  timerRemainingRef.current = remainingMs;
   const lastPulsedSecond = useRef(-1);
+
+  // Rooms: operador (admin) + pelea que está controlando; se re-unen al reconectar
+  useSocketRoom(socket, 'join:admin', null, 'admin');
+  useSocketRoom(socket, 'join:fight', 'leave:fight', fightId ? parseInt(fightId) : null);
+
   // Load initial state
   useEffect(() => {
     if (!fightId) return;
     loadState();
   }, [fightId]);
+
+  // Tras reconectar, re-sincronizar (pudimos perder eventos de la otra computadora)
+  useEffect(() => {
+    if (reconnectCount > 0 && fightIdRef.current) loadState();
+  }, [reconnectCount]);
 
   async function loadState() {
     try {
@@ -121,7 +134,8 @@ export default function ScoringControl() {
       setScoreBlue(data.fight.score_blue || 0);
       setGamJeomRed(data.fight.gam_jeom_red || 0);
       setGamJeomBlue(data.fight.gam_jeom_blue || 0);
-      setTimer(data.timer);
+      setTimer(normalizeTimer({ ...data.timer, serverNow: data.timer.serverNow ?? data.serverNow }));
+      setKyeShieActive(!!data.kyeShie?.active);
       setBreakdown(data.breakdown);
       if (data.gamJeomByRound) setGamJeomByRound(data.gamJeomByRound);
       setRoundWinners({
@@ -313,9 +327,13 @@ export default function ScoringControl() {
   // Socket events
   useEffect(() => {
     if (!socket) return;
-    socket.emit('join-admin');
 
     const fid = () => fightIdRef.current;
+
+    const onTimer = (d) => {
+      if (String(d.fightId) !== String(fid())) return;
+      setTimer(prev => normalizeTimer(d, prev));
+    };
 
     const handlers = {
       'score:awarded': (d) => {
@@ -348,21 +366,12 @@ export default function ScoringControl() {
         }
         loadBreakdown();
       },
-      'timer:tick': (d) => {
-        if (String(d.fightId) !== String(fid())) return;
-        setTimer({ remainingMs: d.remainingMs, round: d.round, running: d.running });
-      },
-      'timer:started': (d) => {
-        if (String(d.fightId) !== String(fid())) return;
-        setTimer(prev => ({ ...prev, running: true, remainingMs: d.remainingMs, round: d.round }));
-      },
-      'timer:stopped': (d) => {
-        if (String(d.fightId) !== String(fid())) return;
-        setTimer(prev => ({ ...prev, running: false, remainingMs: d.remainingMs }));
-      },
+      'timer:sync': onTimer,
+      'timer:started': onTimer,
+      'timer:stopped': onTimer,
       'round:ended': (d) => {
         if (String(d.fightId) !== String(fid())) return;
-        setTimer(prev => ({ ...prev, running: false, remainingMs: 0 }));
+        setTimer(prev => ({ ...prev, running: false, remainingMs: 0, startedAt: null, durationMs: null }));
         setGamJeomRed(0);
         setGamJeomBlue(0);
         setGamJeomByRound(prevState => ({
@@ -425,7 +434,7 @@ export default function ScoringControl() {
         socket.off(event, handler);
       }
     };
-  }, [socket, fightId]);
+  }, [socket]);
 
   async function loadBreakdown() {
     try {
@@ -748,7 +757,7 @@ export default function ScoringControl() {
 
         <div className="sc-center-info">
           <div className={`sc-timer-display ${timer.running ? 'sc-timer-live' : 'sc-timer-stopped'}`}>
-            {formatTime(timer.remainingMs)}
+            {formatTime(remainingMs)}
           </div>
           <div className="sc-round-display">Round {timer.round} / {numRounds}</div>
         </div>

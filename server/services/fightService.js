@@ -207,8 +207,8 @@ export class FightService {
       
       // Solo marcar automáticamente como actual si NO es un bracket con múltiples peleas
       if (!bracketHasMultipleFights) {
-        Fight.setAsCurrent(nextFight.id, tournamentId);
-        emitEvents.currentFightChanged(nextFight);
+        const startedNext = Fight.setAsCurrent(nextFight.id, tournamentId);
+        emitEvents.currentFightChanged(startedNext || nextFight);
       }
       // Si es bracket con múltiples peleas, la pelea queda en 'pending' hasta que se inicie manualmente
     } else {
@@ -217,7 +217,7 @@ export class FightService {
       if (allCompleted) {
         try {
           const podium = PodiumService.generatePodium(tournamentId);
-          emitEvents.podiumGenerated(podium);
+          emitEvents.podiumGenerated(podium, tournamentId);
           emitEvents.tournamentCompleted(tournamentId);
         } catch (error) {
           console.error('Error generando podio:', error.message);
@@ -278,7 +278,7 @@ export class FightService {
     if (!fight) throw new Error('Pelea no encontrada');
 
     Fight.delete(fightId);
-    emitEvents.fightDeleted(fightId);
+    emitEvents.fightDeleted(fightId, fight.tournament_id);
 
     return { success: true };
   }

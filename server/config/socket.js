@@ -1,5 +1,8 @@
 import { Server } from 'socket.io';
 
+const DEBUG = process.env.NODE_ENV !== 'production';
+const log = (...args) => { if (DEBUG) console.log(...args); };
+
 let io;
 let scoringServiceRef = null;
 
@@ -13,12 +16,67 @@ function getScoringService() {
   return scoringServiceRef;
 }
 
+// ============================================
+// ROOMS
+// ============================================
+export const rooms = {
+  tournament: (tournamentId) => `tournament:${tournamentId}`,
+  fight: (fightId) => `fight:${fightId}`,
+  admin: 'admin'
+};
+
+function toId(value) {
+  const n = typeof value === 'object' && value !== null ? Number(value.id) : Number(value);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+function joinTournament(socket, tournamentId) {
+  const id = toId(tournamentId);
+  if (!id) return;
+  // Un cliente sólo observa un torneo a la vez: salir del anterior evita acumular rooms
+  if (socket.data.tournamentId && socket.data.tournamentId !== id) {
+    socket.leave(rooms.tournament(socket.data.tournamentId));
+  }
+  socket.data.tournamentId = id;
+  socket.join(rooms.tournament(id));
+  log(`🏟️ ${socket.id} -> ${rooms.tournament(id)}`);
+}
+
+function leaveTournament(socket, tournamentId) {
+  const id = toId(tournamentId);
+  if (!id) return;
+  socket.leave(rooms.tournament(id));
+  if (socket.data.tournamentId === id) socket.data.tournamentId = null;
+}
+
+function joinFight(socket, fightId) {
+  const id = toId(fightId);
+  if (!id) return;
+  if (socket.data.fightId && socket.data.fightId !== id) {
+    socket.leave(rooms.fight(socket.data.fightId));
+  }
+  socket.data.fightId = id;
+  socket.join(rooms.fight(id));
+  log(`🥋 ${socket.id} -> ${rooms.fight(id)}`);
+}
+
+function leaveFight(socket, fightId) {
+  const id = toId(fightId);
+  if (!id) return;
+  socket.leave(rooms.fight(id));
+  if (socket.data.fightId === id) socket.data.fightId = null;
+}
+
 export function initializeSocket(server) {
   io = new Server(server, {
     cors: {
       origin: '*',
       methods: ['GET', 'POST']
-    }
+    },
+    // Los clientes sólo envían mensajes pequeños (joins / judge:input)
+    maxHttpBufferSize: 64 * 1024,
+    pingInterval: 25000,
+    pingTimeout: 20000
   });
 
   // Pre-load scoring service
@@ -27,31 +85,24 @@ export function initializeSocket(server) {
   });
 
   io.on('connection', (socket) => {
-    console.log(`🔌 Cliente conectado: ${socket.id}`);
+    log(`🔌 Cliente conectado: ${socket.id}`);
 
     socket.on('disconnect', () => {
-      console.log(`🔌 Cliente desconectado: ${socket.id}`);
+      log(`🔌 Cliente desconectado: ${socket.id}`);
     });
 
-    socket.on('join-admin', () => {
-      socket.join('admin-room');
-      console.log(`👤 Admin unido: ${socket.id}`);
-    });
+    // --- Rooms ---
+    socket.on('join:tournament', (tournamentId) => joinTournament(socket, tournamentId));
+    socket.on('leave:tournament', (tournamentId) => leaveTournament(socket, tournamentId));
+    socket.on('join:fight', (fightId) => joinFight(socket, fightId));
+    socket.on('leave:fight', (fightId) => leaveFight(socket, fightId));
+    socket.on('join:admin', () => socket.join(rooms.admin));
 
-    socket.on('join-public', () => {
-      socket.join('public-room');
-      console.log(`👥 Público unido: ${socket.id}`);
-    });
-
-    socket.on('join-judge', (data) => {
-      socket.join(`judge-room`);
-      console.log(`⚖️ Juez unido: ${socket.id} (judge ${data?.judgeId})`);
-    });
-
-    socket.on('join-scoreboard', (data) => {
-      socket.join(`scoreboard-room`);
-      console.log(`📺 Scoreboard unido: ${socket.id} (fight ${data?.fightId})`);
-    });
+    // --- Alias legacy (compatibilidad con clientes antiguos) ---
+    socket.on('join-admin', () => socket.join(rooms.admin));
+    socket.on('join-public', () => { /* la room pública ahora es por torneo (join:tournament) */ });
+    socket.on('join-judge', (data) => joinFight(socket, data?.fightId));
+    socket.on('join-scoreboard', (data) => joinFight(socket, data?.fightId));
 
     // Judge input via WebSocket (real-time scoring)
     socket.on('judge:input', (data) => {
@@ -61,7 +112,7 @@ export function initializeSocket(server) {
         return;
       }
       try {
-        const { fightId, judgeId, judgeName, team, action } = data;
+        const { fightId, judgeId, judgeName, team, action } = data || {};
         if (!fightId || !judgeId || !team || !action) return;
         svc.processJudgeInput(fightId, judgeId, team, action, Date.now(), judgeName);
       } catch (error) {
@@ -80,65 +131,82 @@ export function getIO() {
   return io;
 }
 
+// ============================================
+// EMISIÓN DIRIGIDA (rooms)
+// ============================================
+export const emitTo = {
+  // Sólo a quienes observan ese torneo (público + dashboards admin)
+  tournament(tournamentId, event, payload) {
+    if (!tournamentId) return;
+    getIO().to(rooms.tournament(tournamentId)).emit(event, payload);
+  },
+  // Sólo a scoreboards / jueces / operadores de esa pelea
+  fight(fightId, event, payload) {
+    if (!fightId) return;
+    getIO().to(rooms.fight(fightId)).emit(event, payload);
+  },
+  // A observadores del torneo y de la pelea (Socket.IO deduplica sockets en ambas rooms)
+  fightAndTournament(fight, event, payload) {
+    if (!fight) return;
+    const targets = [];
+    if (fight.tournament_id) targets.push(rooms.tournament(fight.tournament_id));
+    if (fight.id) targets.push(rooms.fight(fight.id));
+    if (targets.length === 0) return;
+    getIO().to(targets).emit(event, payload);
+  },
+  admin(event, payload) {
+    getIO().to(rooms.admin).emit(event, payload);
+  }
+};
+
 // Eventos en tiempo real
 export const emitEvents = {
-  // Emitir actualización de pelea
+  // Actualización de pelea (estado, scores, ganadores de round, etc.)
   fightUpdated: (fight) => {
-    const io = getIO();
-    io.emit('fight:updated', fight);
+    emitTo.fightAndTournament(fight, 'fight:updated', fight);
   },
 
-  // Emitir cambio de orden
+  // Cambio de orden: sólo los observadores del torneo lo necesitan
   orderChanged: (fights) => {
-    const io = getIO();
-    io.emit('fights:order-changed', fights);
+    const tournamentId = fights?.[0]?.tournament_id;
+    if (!tournamentId) return;
+    emitTo.tournament(tournamentId, 'fights:order-changed', fights);
   },
 
-  // Emitir nueva pelea actual
   currentFightChanged: (fight) => {
-    const io = getIO();
-    io.emit('fight:current-changed', fight);
+    emitTo.fightAndTournament(fight, 'fight:current-changed', fight);
   },
 
-  // Emitir pelea creada
   fightCreated: (fight) => {
-    const io = getIO();
-    io.emit('fight:created', fight);
+    emitTo.tournament(fight?.tournament_id, 'fight:created', fight);
   },
 
-  // Emitir pelea eliminada
-  fightDeleted: (fightId) => {
-    const io = getIO();
-    io.emit('fight:deleted', fightId);
+  fightDeleted: (fightId, tournamentId) => {
+    emitTo.tournament(tournamentId, 'fight:deleted', fightId);
+    emitTo.fight(fightId, 'fight:deleted', fightId);
   },
 
-  // Emitir resultado registrado
   resultRegistered: (fight) => {
-    const io = getIO();
-    io.emit('fight:result-registered', fight);
+    emitTo.fightAndTournament(fight, 'fight:result-registered', fight);
   },
 
-  // Emitir configuración actualizada
+  // Configuración global: sólo la consumen operadores
   configUpdated: (config) => {
-    const io = getIO();
-    io.emit('config:updated', config);
+    emitTo.admin('config:updated', config);
   },
 
-  // Emitir podio generado
-  podiumGenerated: (podium) => {
-    const io = getIO();
-    io.emit('podium:generated', podium);
+  podiumGenerated: (podium, tournamentId) => {
+    emitTo.tournament(tournamentId ?? podium?.tournament_id, 'podium:generated', podium);
+    emitTo.admin('podium:generated', podium);
   },
 
-  // Emitir torneo completado
   tournamentCompleted: (tournamentId) => {
-    const io = getIO();
-    io.emit('tournament:completed', tournamentId);
+    emitTo.tournament(tournamentId, 'tournament:completed', tournamentId);
+    emitTo.admin('tournament:completed', tournamentId);
   },
 
-  // Emitir torneo eliminado
   tournamentDeleted: (data) => {
-    const io = getIO();
-    io.emit('tournament:deleted', data);
+    emitTo.tournament(data?.id, 'tournament:deleted', data);
+    emitTo.admin('tournament:deleted', data);
   }
 };

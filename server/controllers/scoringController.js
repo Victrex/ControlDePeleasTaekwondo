@@ -3,7 +3,7 @@ import { scoringService } from '../services/scoringService.js';
 import { timerService } from '../services/timerService.js';
 import { ScoringConfig } from '../models/ScoringConfig.js';
 import { Score } from '../models/Score.js';
-import { getIO } from '../config/socket.js';
+import { emitEvents } from '../config/socket.js';
 
 export const scoringController = {
   // Timer controls
@@ -202,8 +202,7 @@ export const scoringController = {
       let fight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
 
       // Emit round winner update so /public refreshes dots
-      const io = getIO();
-      io.emit('fight:updated', fight);
+      emitEvents.fightUpdated(fight);
 
       // Check if someone won majority of rounds (2 of 3)
       const config = ScoringConfig.getByTournament(fight.tournament_id);
@@ -221,8 +220,8 @@ export const scoringController = {
         const finalWinner = redWins >= needed ? 'red' : 'blue';
         db.prepare("UPDATE fights SET final_winner = ?, status = 'completed' WHERE id = ?").run(finalWinner, fightId);
         fight = db.prepare('SELECT * FROM fights WHERE id = ?').get(fightId);
-        io.emit('fight:result-registered', fight);
-        io.emit('fight:updated', fight);
+        emitEvents.resultRegistered(fight);
+        emitEvents.fightUpdated(fight);
       }
 
       res.json({ success: true, fight });
@@ -259,19 +258,20 @@ export const scoringController = {
 
       const config = ScoringConfig.getByTournament(fight.tournament_id);
       const breakdown = Score.getBreakdown(fightId);
-      const timerState = timerService.getState(fightId);
 
-      // Per-round gam-jeom counts
+      // Per-round gam-jeom counts (una sola consulta agrupada en lugar de 2 por round)
       const gamJeomByRound = {};
-      for (let r = 1; r <= config.num_rounds; r++) {
-        // gam_jeom events are scored for the OPPONENT, so:
-        // fouls by red in round r = gam_jeom events awarded to blue in round r
-        const blueGJ = db.prepare(`SELECT COUNT(*) as cnt FROM fight_scores WHERE fight_id = ? AND round = ? AND team = 'blue' AND action = 'gam_jeom'`).get(fightId, r).cnt;
-        const redGJ = db.prepare(`SELECT COUNT(*) as cnt FROM fight_scores WHERE fight_id = ? AND round = ? AND team = 'red' AND action = 'gam_jeom'`).get(fightId, r).cnt;
-        gamJeomByRound[r] = {
-          red: blueGJ,   // red's fouls = points awarded to blue
-          blue: redGJ    // blue's fouls = points awarded to red
-        };
+      for (let r = 1; r <= config.num_rounds; r++) gamJeomByRound[r] = { red: 0, blue: 0 };
+      const gjRows = db.prepare(`
+        SELECT round, team, COUNT(*) as cnt FROM fight_scores
+        WHERE fight_id = ? AND action = 'gam_jeom'
+        GROUP BY round, team
+      `).all(fightId);
+      for (const row of gjRows) {
+        if (!gamJeomByRound[row.round]) gamJeomByRound[row.round] = { red: 0, blue: 0 };
+        // gam_jeom events are scored for the OPPONENT: points awarded to blue = red's fouls
+        if (row.team === 'blue') gamJeomByRound[row.round].red = row.cnt;
+        else gamJeomByRound[row.round].blue = row.cnt;
       }
 
       res.json({
@@ -279,15 +279,9 @@ export const scoringController = {
         config,
         breakdown,
         gamJeomByRound,
-        timer: timerState ? {
-          remainingMs: timerState.remainingMs,
-          round: timerState.round,
-          running: timerState.running
-        } : {
-          remainingMs: fight.timer_remaining_ms || config.round_time_seconds * 1000,
-          round: fight.current_round || 1,
-          running: false
-        }
+        timer: timerService.getPublicState(fightId, fight, config),
+        kyeShie: timerService.getKyeShieState(fightId),
+        serverNow: Date.now()
       });
     } catch (error) {
       res.status(400).json({ error: error.message });
